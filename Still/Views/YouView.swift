@@ -176,8 +176,8 @@ struct PrivacySheet: View {
               detail: "Because the key never leaves this iPhone, entries can't be restored on a different device. Export opened entries if you want a copy."),
         Point(icon: "faceid", title: "Face ID stays with iOS",
               detail: "Face ID is handled by iOS. still. never sees your biometric data."),
-        Point(icon: "sparkles", title: "Notes are off",
-              detail: "AI notes aren't active in this build. When they are, this page will explain exactly what's sent and how long it's kept.")
+        Point(icon: "applewatch", title: "Apple Watch",
+              detail: "Entries written on Apple Watch go straight to your iPhone and are encrypted there. The watch only holds them until your iPhone receives them.")
     ]
 
     var body: some View {

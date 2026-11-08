@@ -199,7 +199,7 @@ private struct EntryCard: View {
                 .background(Color.black, in: Capsule())
                 .foregroundStyle(Theme.ink)
         } else {
-            Label("Opens \(Fmt.shortDate(entry.sealedUntil))", systemImage: "lock")
+            Label("Opens \(Fmt.shortDate(entry.opensAt))", systemImage: "lock")
                 .font(.footnote)
                 .foregroundStyle(Theme.secondary)
         }
@@ -211,6 +211,10 @@ private struct EntryCard: View {
                 .font(.footnote.weight(.semibold))
         } else if entry.source == .voice {
             Label("Voice entry", systemImage: "waveform")
+                .font(.footnote)
+                .foregroundStyle(Theme.tertiary)
+        } else if entry.source == .watch {
+            Label("Written on Apple Watch", systemImage: "applewatch")
                 .font(.footnote)
                 .foregroundStyle(Theme.tertiary)
         }

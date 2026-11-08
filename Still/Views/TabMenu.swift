@@ -5,7 +5,6 @@ import SwiftData
 struct TabMenu: View {
     @Binding var tab: AppTab
     @Binding var open: Bool
-    @Query private var notes: [Note]
     @Environment(StreakStore.self) private var streak
 
     var body: some View {
@@ -25,7 +24,7 @@ struct TabMenu: View {
 
             if open {
                 VStack(spacing: 2) {
-                    ForEach(AppTab.allCases) { item in
+                    ForEach(AppTab.visible) { item in
                         row(item)
                     }
                 }
@@ -71,7 +70,6 @@ struct TabMenu: View {
     private func meta(_ item: AppTab) -> String {
         switch item {
         case .streak: return streak.days > 0 ? "\(streak.days)d" : ""
-        case .notes: return notes.isEmpty ? "" : "\(notes.count)"
         default: return ""
         }
     }

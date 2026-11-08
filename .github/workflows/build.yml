@@ -1,4 +1,4 @@
-name: Build unsigned IPA
+name: Build IPAs
 
 on:
   push:
@@ -24,24 +24,46 @@ jobs:
             -project Still.xcodeproj \
             -scheme Still \
             -configuration Release \
-            -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tee build.log | grep -E "error:|warning: unre|\*\* BUILD" || true
+            build 2>&1 | tee build.log | grep -E "error:|\*\* BUILD" || true
           grep -q "\*\* BUILD SUCCEEDED \*\*" build.log
 
-      - name: Package IPA
-        run: |
-          mkdir -p Payload
-          cp -R build/Build/Products/Release-iphoneos/Still.app Payload/
-          zip -qry Still.ipa Payload
+      - name: Show errors
+        if: failure()
+        run: grep -E "error:" -A3 build.log | head -150 || true
 
-      - name: Upload IPA
+      # Ad-hoc signatures carry entitlements (App Group) so Sideloadly can
+      # re-sign with them. Inner bundles first, the app last.
+      - name: Ad-hoc sign and package
+        run: |
+          APP=build/Build/Products/Release-iphoneos/Still.app
+          ls -R "$APP" | grep -E "\.app$|\.appex$|^/" | head -40
+          sign() { codesign --force --sign - --timestamp=none "$@"; }
+
+          for ext in "$APP"/Watch/*.app/PlugIns/*.appex; do [ -e "$ext" ] && sign "$ext"; done
+          for w in "$APP"/Watch/*.app; do [ -e "$w" ] && sign "$w"; done
+          sign --entitlements Widgets/Widgets.entitlements "$APP/PlugIns/StillWidgets.appex"
+          sign --entitlements Still/Still.entitlements "$APP"
+
+          mkdir -p out/watch/Payload out/phone/Payload
+          cp -R "$APP" out/watch/Payload/
+          (cd out/watch && zip -qry ../../Still-with-Watch.ipa Payload)
+
+          cp -R "$APP" out/phone/Payload/
+          rm -rf out/phone/Payload/Still.app/Watch
+          sign --entitlements Still/Still.entitlements out/phone/Payload/Still.app
+          (cd out/phone && zip -qry ../../Still.ipa Payload)
+          ls -la *.ipa
+
+      - name: Upload IPAs
         uses: actions/upload-artifact@v4
         with:
           name: Still-ipa
-          path: Still.ipa
+          path: |
+            Still.ipa
+            Still-with-Watch.ipa
           retention-days: 30

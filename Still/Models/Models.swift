@@ -4,6 +4,7 @@ import SwiftData
 enum EntrySource: String, Codable {
     case text
     case voice
+    case watch
 }
 
 @Model
@@ -16,20 +17,30 @@ final class Entry {
     var sourceRaw: String = EntrySource.text.rawValue
     var deletionRequestedAt: Date?
 
-    static let sealDuration: TimeInterval = 14 * 24 * 3600
+    static let sealDays = 14
     static let deletionWait: TimeInterval = 6 * 3600
 
     init(cipher: Data, source: EntrySource, createdAt: Date = .now) {
         self.id = UUID()
         self.createdAt = createdAt
-        self.sealedUntil = createdAt.addingTimeInterval(Entry.sealDuration)
+        self.sealedUntil = Entry.opensAt(for: createdAt)
         self.cipher = cipher
         self.sourceRaw = source.rawValue
     }
 
     var source: EntrySource { EntrySource(rawValue: sourceRaw) ?? .text }
 
-    func isReady(at now: Date = .now) -> Bool { now >= sealedUntil }
+    /// Entries open at the start (local midnight) of the 14th day after they were written.
+    static func opensAt(for createdAt: Date) -> Date {
+        let cal = Calendar.current
+        let day = cal.startOfDay(for: createdAt)
+        return cal.date(byAdding: .day, value: sealDays, to: day) ?? createdAt.addingTimeInterval(Double(sealDays) * 86400)
+    }
+
+    /// Always derived from the creation day, so older entries follow the same rule.
+    var opensAt: Date { Entry.opensAt(for: createdAt) }
+
+    func isReady(at now: Date = .now) -> Bool { now >= opensAt }
 
     var deletionConfirmableAt: Date? {
         deletionRequestedAt?.addingTimeInterval(Entry.deletionWait)

@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-struct StreakState: Codable {
+struct StreakState: Codable, Equatable {
     var days: Int = 0
     /// Start of the current 36-hour window.
     var anchor: Date?

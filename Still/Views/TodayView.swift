@@ -4,8 +4,7 @@ import SwiftData
 struct TodayView: View {
     @Environment(\.modelContext) private var context
     @Environment(StreakStore.self) private var streak
-    @Query(sort: \Entry.createdAt, order: .reverse) private var entries: [Entry]
-    @AppStorage("remindersEnabled") private var remindersEnabled = false
+    @Environment(AppRouter.self) private var router
 
     @State private var text = ""
     @State private var isEditing = false
@@ -13,6 +12,7 @@ struct TodayView: View {
     @State private var sealedEntry: Entry?
     @State private var sealCount = 0
     @State private var errorMessage: String?
+    @State private var handledWriteRequest = 0
 
     private var expanded: Bool { isEditing || !text.isEmpty }
     private var canSeal: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -56,6 +56,8 @@ struct TodayView: View {
                 withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { isEditing = false }
             }
         }
+        .onChange(of: router.writeRequest) { _, _ in consumeWriteRequest() }
+        .onAppear { consumeWriteRequest() }
         .sensoryFeedback(.success, trigger: sealCount)
         .fullScreenCover(item: $sealedEntry) { entry in
             SealedView(entry: entry)
@@ -114,6 +116,12 @@ struct TodayView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: expanded)
     }
 
+    private func consumeWriteRequest() {
+        guard router.writeRequest != handledWriteRequest else { return }
+        handledWriteRequest = router.writeRequest
+        beginEditing()
+    }
+
     private func beginEditing() {
         withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { isEditing = true }
         Task { @MainActor in
@@ -125,13 +133,7 @@ struct TodayView: View {
     private func seal() {
         guard canSeal else { return }
         do {
-            let entry = Entry(cipher: try EntryCipher.seal(text), source: .text)
-            context.insert(entry)
-            try context.save()
-            streak.recordEntry()
-            ReflectionQueue.enqueue(entry.id)
-            ReminderService.reschedule(entryDates: [entry.createdAt] + entries.map(\.createdAt),
-                                       streak: streak, enabled: remindersEnabled)
+            let entry = try EntryWriter.seal(text, source: .text, context: context, streak: streak)
             focused = false
             text = ""
             isEditing = false
@@ -204,7 +206,7 @@ struct SealedView: View {
                     .font(.system(size: 40, weight: .semibold))
                     .kerning(-1.5)
                     .foregroundStyle(Theme.ink)
-                Text("This entry rests until\n\(Fmt.longDate(entry.sealedUntil)).")
+                Text("This entry opens on\n\(Fmt.longDate(entry.opensAt)).")
                     .font(.system(size: 17))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Theme.secondary)

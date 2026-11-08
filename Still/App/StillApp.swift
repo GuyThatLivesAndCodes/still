@@ -6,6 +6,16 @@ struct StillApp: App {
     @State private var streak = StreakStore()
     @State private var wallet = TokenWallet()
     @State private var lock = AppLock()
+    @State private var router = AppRouter.shared
+    private let container: ModelContainer
+
+    init() {
+        do {
+            container = try ModelContainer(for: Entry.self, Note.self)
+        } catch {
+            fatalError("Could not open the journal store: \(error)")
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -13,16 +23,25 @@ struct StillApp: App {
                 .environment(streak)
                 .environment(wallet)
                 .environment(lock)
+                .environment(router)
                 .preferredColorScheme(.dark)
                 .tint(Theme.accent)
+                .onAppear { PhoneLink.shared.start(container: container, streak: streak) }
+                .onOpenURL { router.handle($0) }
         }
-        .modelContainer(for: [Entry.self, Note.self])
+        .modelContainer(container)
     }
 }
 
 enum AppTab: String, CaseIterable, Identifiable {
     case today, vault, notes, streak, you
     var id: String { rawValue }
+
+    /// Notes stay hidden until the reflection server exists.
+    static var visible: [AppTab] {
+        allCases.filter { $0 != .notes || ReflectionQueue.isEnabled }
+    }
+
     var title: String {
         switch self {
         case .today: return "Today"
@@ -39,6 +58,8 @@ struct RootView: View {
     @Environment(\.modelContext) private var context
     @Environment(StreakStore.self) private var streak
     @Environment(AppLock.self) private var lock
+    @Environment(AppRouter.self) private var router
+    @AppStorage("streakVisible") private var streakVisible = true
     @Query(sort: \Entry.createdAt, order: .reverse) private var entries: [Entry]
     @AppStorage("faceIDEnabled") private var faceIDEnabled = false
     @AppStorage("remindersEnabled") private var remindersEnabled = false
@@ -79,9 +100,19 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: tab)
+        .onChange(of: router.writeRequest) { _, _ in
+            menuOpen = false
+            tab = .today
+        }
+        .onChange(of: streak.state) { _, _ in
+            EntryWriter.syncSurroundings(context: context, streak: streak)
+        }
+        .onChange(of: streakVisible) { _, _ in
+            EntryWriter.syncSurroundings(context: context, streak: streak)
+        }
         .task {
             streak.refresh()
-            ReminderService.reschedule(entryDates: entries.map(\.createdAt), streak: streak, enabled: remindersEnabled)
+            EntryWriter.syncSurroundings(context: context, streak: streak)
             await ReflectionQueue.deliverIfDue(context: context)
         }
         .onChange(of: scenePhase) { _, phase in
@@ -90,7 +121,7 @@ struct RootView: View {
                 lock.lockIfEnabled()
             case .active:
                 streak.refresh()
-                ReminderService.reschedule(entryDates: entries.map(\.createdAt), streak: streak, enabled: remindersEnabled)
+                EntryWriter.syncSurroundings(context: context, streak: streak)
                 Task { await ReflectionQueue.deliverIfDue(context: context) }
             default:
                 break
