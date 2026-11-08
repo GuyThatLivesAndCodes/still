@@ -60,6 +60,8 @@ struct RootView: View {
     @Environment(AppLock.self) private var lock
     @Environment(AppRouter.self) private var router
     @AppStorage("streakVisible") private var streakVisible = true
+    @AppStorage("acceptedTermsVersion") private var acceptedTermsVersion = 0
+    @AppStorage("replayIntro") private var replayIntro = false
     @Query(sort: \Entry.createdAt, order: .reverse) private var entries: [Entry]
     @AppStorage("faceIDEnabled") private var faceIDEnabled = false
     @AppStorage("remindersEnabled") private var remindersEnabled = false
@@ -92,6 +94,17 @@ struct RootView: View {
             TabMenu(tab: $tab, open: $menuOpen)
                 .padding(.leading, 20)
                 .padding(.top, 6)
+
+            if acceptedTermsVersion < LegalText.version || replayIntro {
+                OnboardingView(startAtTerms: acceptedTermsVersion > 0 && !replayIntro) {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        acceptedTermsVersion = LegalText.version
+                        replayIntro = false
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(5)
+            }
 
             if faceIDEnabled && lock.isLocked {
                 LockView()

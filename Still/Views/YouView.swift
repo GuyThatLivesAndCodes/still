@@ -9,6 +9,9 @@ struct YouView: View {
     @AppStorage("faceIDEnabled") private var faceIDEnabled = false
     @AppStorage("remindersEnabled") private var remindersEnabled = false
     @State private var showPrivacy = false
+    @State private var showTerms = false
+    @State private var showPolicy = false
+    @AppStorage("replayIntro") private var replayIntro = false
     @State private var remindersDenied = false
 
     var body: some View {
@@ -58,7 +61,17 @@ struct YouView: View {
                     }
                 }
 
-                Text("still. 0.1 · Write it, seal it, and let it go.")
+                section("About") {
+                    VStack(spacing: 0) {
+                        rowButton("Terms of Use") { showTerms = true }
+                        Divider().overlay(Theme.hairline).padding(.horizontal, 16)
+                        rowButton("Privacy Policy") { showPolicy = true }
+                        Divider().overlay(Theme.hairline).padding(.horizontal, 16)
+                        rowButton("Replay the intro") { replayIntro = true }
+                    }
+                }
+
+                Text("still. 0.2 · Write it, seal it, and let it go.")
                     .font(.footnote)
                     .foregroundStyle(Theme.tertiary)
                     .frame(maxWidth: .infinity)
@@ -70,6 +83,8 @@ struct YouView: View {
         }
         .scrollIndicators(.hidden)
         .sheet(isPresented: $showPrivacy) { PrivacySheet() }
+        .sheet(isPresented: $showTerms) { LegalSheet(title: "Terms of Use", sections: LegalText.terms) }
+        .sheet(isPresented: $showPolicy) { LegalSheet(title: "Privacy Policy", sections: LegalText.privacy) }
     }
 
     private var tokens: some View {
