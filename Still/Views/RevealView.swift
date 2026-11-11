@@ -1,13 +1,16 @@
 import SwiftUI
 import SwiftData
 
-/// Shows an entry for 60 seconds, then reseals automatically.
+/// Shows an entry for 60 seconds (longer for voice entries, so the whole
+/// recording can be heard), then reseals automatically.
 struct RevealView: View {
     let entry: Entry
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var endsAt = Date.now.addingTimeInterval(60)
     @State private var text = ""
+    @State private var window: TimeInterval = 60
+    @State private var player = VoicePlayer()
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
@@ -38,6 +41,10 @@ struct RevealView: View {
                             .foregroundStyle(Theme.ink)
                     }
 
+                    if entry.hasAudio {
+                        voiceCard
+                    }
+
                     ScrollView {
                         Text(text)
                             .font(.system(size: 18))
@@ -62,10 +69,50 @@ struct RevealView: View {
             }
             .onChange(of: left <= 0) { _, done in if done { dismiss() } }
         }
-        .onAppear { text = entry.plainText() }
+        .onAppear {
+            text = entry.plainText()
+            if entry.hasAudio {
+                window = max(60, entry.audioDuration + 20)
+                endsAt = Date.now.addingTimeInterval(window)
+                if let data = entry.audioData() { player.load(data: data) }
+            }
+        }
+        .onDisappear { player.stop() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { dismiss() }
         }
+    }
+
+    private var voiceCard: some View {
+        HStack(spacing: 12) {
+            Button(action: player.toggle) {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(width: 40, height: 40)
+                    .background(Theme.ink, in: Circle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(PressScaleStyle())
+            .accessibilityLabel(player.isPlaying ? "Pause voice entry" : "Play voice entry")
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Your voice")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.secondary)
+                PlaybackBar(progress: player.progress)
+                    .frame(height: 4)
+            }
+
+            Text(VoiceControl.time(player.duration > 0 ? player.duration : entry.audioDuration))
+                .font(.system(size: 14, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(Theme.secondary)
+        }
+        .padding(12)
+        .glass(20)
+        .opacity(player.duration > 0 ? 1 : 0.5)
+        .disabled(player.duration <= 0)
     }
 
     private var daysAgo: Int {
@@ -77,7 +124,7 @@ struct RevealView: View {
             ZStack {
                 Circle().stroke(Color.white.opacity(0.1), lineWidth: 3)
                 Circle()
-                    .trim(from: 0, to: left / 60)
+                    .trim(from: 0, to: left / window)
                     .stroke(Theme.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 0.25), value: left)

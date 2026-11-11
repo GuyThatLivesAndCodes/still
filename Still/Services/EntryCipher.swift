@@ -20,6 +20,16 @@ enum EntryCipher {
         return combined
     }
 
+    static func seal(data: Data) throws -> Data {
+        let box = try AES.GCM.seal(data, using: try key())
+        guard let combined = box.combined else { throw CipherError.sealFailed }
+        return combined
+    }
+
+    static func openData(_ data: Data) throws -> Data {
+        try AES.GCM.open(try AES.GCM.SealedBox(combined: data), using: try key())
+    }
+
     static func open(_ data: Data) throws -> String {
         let box = try AES.GCM.SealedBox(combined: data)
         let plain = try AES.GCM.open(box, using: try key())
