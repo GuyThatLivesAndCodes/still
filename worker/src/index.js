@@ -36,7 +36,7 @@ export default {
 
     const task = TASKS[match[1]];
     try {
-      const result = await env.AI.run(env.MODEL, {
+      const result = await env.AI.run(env.MODEL || "@cf/meta/llama-3.1-8b-instruct-fp8-fast", {
         messages: buildMessages(task, texts),
         max_tokens: task.maxTokens,
         temperature: 0.7,

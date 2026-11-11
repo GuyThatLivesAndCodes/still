@@ -19,9 +19,14 @@ npx wrangler deploy
 
 Wrangler prints a URL like `https://still-ai.<your-subdomain>.workers.dev`.
 
+## Or paste it in the dashboard
+
+`dashboard.js` is the same Worker in one file. Create a Worker named `still`, paste it, then in *Settings → Bindings* add **Workers AI** with the name `AI`. A Rate Limiting binding named `LIMITER` is optional.
+
 ## Point the app at it
 
-- **CI builds:** in GitHub, go to *Settings → Secrets and variables → Actions → Variables* and add `STILL_AI_ENDPOINT` with that URL. The next **Build IPAs** run bakes it in.
+- **Default:** `project.yml` already points at `https://still.zorbyteofficial.workers.dev`.
+- **CI override:** in GitHub, go to *Settings → Secrets and variables → Actions → Variables* and add `STILL_AI_ENDPOINT` with that URL. The next **Build IPAs** run bakes it in.
 - **Local builds:** set `STILL_AI_ENDPOINT` in `project.yml` (Still target settings), then `xcodegen generate`.
 
 With no endpoint set, the app hides the Cloudflare option and uses only Apple's on-device model.
