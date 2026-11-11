@@ -149,13 +149,14 @@ struct LiveWaveform: View {
 
 struct PlaybackBar: View {
     let progress: Double
+    private var fraction: CGFloat { CGFloat(min(max(progress, 0), 1)) }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.white.opacity(0.12))
                 Capsule().fill(Theme.accent)
-                    .frame(width: max(4, geo.size.width * min(max(progress, 0), 1)))
+                    .frame(width: max(4, geo.size.width * fraction))
             }
         }
         .accessibilityHidden(true)
