@@ -19,14 +19,16 @@ struct WatchProvider: TimelineProvider {
         completion(WatchEntry(date: .now))
     }
     func getTimeline(in context: Context, completion: @escaping (Timeline<WatchEntry>) -> Void) {
-        completion(Timeline(entries: [WatchEntry(date: .now)], policy: .never))
+        // New opener each day.
+        let midnight = Calendar.current.startOfDay(for: .now.addingTimeInterval(86400))
+        completion(Timeline(entries: [WatchEntry(date: .now)], policy: .after(midnight)))
     }
 }
 
 struct WatchWriteComplication: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "WatchWrite", provider: WatchProvider()) { _ in
-            WatchWriteView()
+        StaticConfiguration(kind: "WatchWrite", provider: WatchProvider()) { entry in
+            WatchWriteView(entry: entry)
                 .containerBackground(for: .widget) { Color.black }
         }
         .configurationDisplayName("Write")
@@ -36,6 +38,7 @@ struct WatchWriteComplication: Widget {
 }
 
 struct WatchWriteView: View {
+    let entry: WatchEntry
     @Environment(\.widgetFamily) private var family
 
     var body: some View {
@@ -43,7 +46,7 @@ struct WatchWriteView: View {
         case .accessoryRectangular:
             VStack(alignment: .leading, spacing: 2) {
                 Text("still.").font(.headline).widgetAccentable()
-                Text("What's here right now?").font(.caption)
+                Text(Openers.forDay(entry.date)).font(.caption).lineLimit(2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         case .accessoryCorner:

@@ -82,6 +82,7 @@ struct WatchHome: View {
     @Environment(WatchLink.self) private var link
     @State private var text = ""
     @State private var sealed = false
+    @State private var opener = Openers.starter.randomElement() ?? ""
 
     private var canSeal: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
@@ -104,7 +105,15 @@ struct WatchHome: View {
                             }
                         }
 
-                        TextField("What's here right now?", text: $text, axis: .vertical)
+                        if text.isEmpty {
+                            Text(opener)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .onTapGesture { opener = Openers.starter.randomElement() ?? opener }
+                        }
+
+                        TextField("Write", text: $text, axis: .vertical)
                             .lineLimit(2...6)
 
                         Button {

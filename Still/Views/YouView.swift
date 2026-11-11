@@ -91,19 +91,19 @@ struct YouView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Early reveals").font(.body.weight(.semibold)).foregroundStyle(Theme.ink)
-                Text("\(TokenWallet.monthlyFree) free each month · resets \(Fmt.shortDate(wallet.nextReset))")
+                Text("\(TokenWallet.weeklyFree) free each week · resets \(Fmt.shortDate(wallet.nextReset))")
                     .font(.footnote).foregroundStyle(Theme.secondary)
             }
             Spacer()
             HStack(spacing: 6) {
-                ForEach(0..<TokenWallet.monthlyFree, id: \.self) { i in
+                ForEach(0..<TokenWallet.weeklyFree, id: \.self) { i in
                     Circle()
                         .fill(i < wallet.available() ? Theme.accent : Color.white.opacity(0.15))
                         .frame(width: 14, height: 14)
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(wallet.available()) of \(TokenWallet.monthlyFree) left")
+            .accessibilityLabel("\(wallet.available()) of \(TokenWallet.weeklyFree) left")
         }
         .padding(18)
         .glass(22)
