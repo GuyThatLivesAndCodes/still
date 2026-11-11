@@ -54,7 +54,7 @@ enum ReminderService {
         if fire <= now.addingTimeInterval(60), let tomorrow = at(dayOffset: 1) { fire = tomorrow }
 
         var body = "Take a moment for yourself today."
-        if let deadline = streak.deadline, !streak.isPaused, deadline > now {
+        if let deadline = streak.deadline, deadline > now {
             // Never let the reminder land after the streak would end.
             if fire > deadline.addingTimeInterval(-3600) {
                 let earlier = deadline.addingTimeInterval(-3 * 3600)

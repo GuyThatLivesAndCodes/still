@@ -141,7 +141,7 @@ struct RevealView: View {
     }
 }
 
-/// Six-hour deletion wait, then a second confirmation.
+/// Two-hour deletion wait, then a second confirmation.
 struct DeleteView: View {
     let entry: Entry
     @Environment(\.modelContext) private var context
@@ -175,7 +175,7 @@ struct DeleteView: View {
                     ProgressView(value: min(max(progress, 0), 1))
                         .tint(Theme.ink)
                         .frame(width: 220)
-                    Text("Six hours gives you room to change your mind. After that, you'll confirm once more and the entry is gone for good.")
+                    Text("Two hours gives you room to change your mind. After that, you'll confirm once more and the entry is gone for good.")
                         .font(.subheadline)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Theme.secondary)

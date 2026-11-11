@@ -4,7 +4,6 @@ import Foundation
 struct WidgetSnapshot: Codable {
     var days: Int = 0
     var deadline: Date?
-    var paused: Bool = false
     var streakVisible: Bool = true
     var lastEntry: Date?
 
@@ -14,7 +13,7 @@ struct WidgetSnapshot: Codable {
     }
 
     func hasRunningStreak(at now: Date = .now) -> Bool {
-        guard streakVisible, !paused, days > 0, let deadline else { return false }
+        guard streakVisible, days > 0, let deadline else { return false }
         return deadline > now
     }
 }

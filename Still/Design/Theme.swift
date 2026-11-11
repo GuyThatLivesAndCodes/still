@@ -59,7 +59,9 @@ struct SecondaryButtonStyle: ButtonStyle {
             .frame(height: 54)
             .foregroundStyle(Theme.ink)
             .glass(27)
-            .opacity(configuration.isPressed ? 0.7 : 1)
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 

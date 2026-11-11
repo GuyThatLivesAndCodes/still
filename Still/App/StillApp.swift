@@ -114,6 +114,7 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: tab)
+        .sensoryFeedback(.selection, trigger: tab)
         .onChange(of: router.writeRequest) { _, _ in
             menuOpen = false
             tab = .today
@@ -125,7 +126,6 @@ struct RootView: View {
             EntryWriter.syncSurroundings(context: context, streak: streak)
         }
         .task {
-            streak.refresh()
             EntryWriter.syncSurroundings(context: context, streak: streak)
             await ReflectionQueue.deliverIfDue(context: context)
         }
@@ -134,7 +134,6 @@ struct RootView: View {
             case .background:
                 lock.lockIfEnabled()
             case .active:
-                streak.refresh()
                 EntryWriter.syncSurroundings(context: context, streak: streak)
                 Task { await ReflectionQueue.deliverIfDue(context: context) }
             default:

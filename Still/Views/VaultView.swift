@@ -3,12 +3,16 @@ import SwiftData
 
 struct VaultView: View {
     @Environment(TokenWallet.self) private var wallet
+    @Environment(\.modelContext) private var context
     @Query(sort: \Entry.createdAt, order: .reverse) private var entries: [Entry]
 
     @State private var revealing: Entry?
     @State private var deleting: Entry?
     @State private var earlyCandidate: Entry?
     @State private var deleteCandidate: Entry?
+    @State private var noTokens: Entry?
+    @State private var revealed = 0
+    @State private var denied = 0
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { ctx in
@@ -32,11 +36,16 @@ struct VaultView: View {
                         Text("Resting").sectionLabel().padding(.top, 4)
                         LazyVStack(spacing: 10) {
                             ForEach(entries) { entry in
-                                EntryCard(entry: entry, now: ctx.date)
-                                    .onTapGesture { tap(entry, now: ctx.date) }
-                                    .contextMenu { menu(for: entry, now: ctx.date) }
+                                Button { tap(entry, now: ctx.date) } label: {
+                                    EntryCard(entry: entry, now: ctx.date)
+                                }
+                                .buttonStyle(PressableCardStyle())
+                                .contextMenu { menu(for: entry, now: ctx.date) }
+                                .transition(.asymmetric(insertion: .opacity.combined(with: .move(edge: .top)),
+                                                        removal: .opacity.combined(with: .scale(scale: 0.96))))
                             }
                         }
+                        .animation(.snappy, value: entries.map(\.id))
                     }
                 }
                 .padding(.horizontal, 20)
@@ -45,28 +54,40 @@ struct VaultView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .sensoryFeedback(.impact(weight: .medium), trigger: revealed)
+        .sensoryFeedback(.warning, trigger: denied)
         .fullScreenCover(item: $revealing) { RevealView(entry: $0) }
+        .alert("Still resting", isPresented: Binding(
+            get: { noTokens != nil }, set: { if !$0 { noTokens = nil } }), presenting: noTokens) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { entry in
+            Text("This entry opens \(Fmt.longDate(entry.opensAt)). You've used this week's early reveals; they refill next week.")
+        }
         .sheet(item: $deleting) { DeleteView(entry: $0) }
         .confirmationDialog("Reveal early?", isPresented: Binding(
             get: { earlyCandidate != nil }, set: { if !$0 { earlyCandidate = nil } }),
             titleVisibility: .visible, presenting: earlyCandidate) { entry in
-            Button("Use 1 token and reveal for 60 seconds") {
-                if wallet.spend() { revealing = entry }
+            Button("Use 1 token to open it now") {
+                guard wallet.spend() else { return }
+                entry.revealedEarlyAt = .now
+                try? context.save()
+                revealed += 1
+                revealing = entry
             }
             Button("Keep it sealed", role: .cancel) {}
         } message: { _ in
-            Text("You have \(wallet.available()) of \(TokenWallet.weeklyFree) early reveals left this week.")
+            Text("It stays open after this, just like an entry past its date. Each view still reseals after 60 seconds. You have \(wallet.available()) of \(TokenWallet.weeklyFree) early reveals left this week.")
         }
         .confirmationDialog("Delete this entry?", isPresented: Binding(
             get: { deleteCandidate != nil }, set: { if !$0 { deleteCandidate = nil } }),
             titleVisibility: .visible, presenting: deleteCandidate) { entry in
-            Button("Start 6-hour wait", role: .destructive) {
+            Button("Start 2-hour wait", role: .destructive) {
                 entry.deletionRequestedAt = .now
                 deleting = entry
             }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("After 6 hours you'll confirm once more. You can cancel any time before then.")
+            Text("After 2 hours you'll confirm once more. You can cancel any time before then.")
         }
     }
 
@@ -97,6 +118,7 @@ struct VaultView: View {
         if entry.isPendingDeletion { deleting = entry }
         else if entry.isReady(at: now) { revealing = entry }
         else if wallet.available(at: now) > 0 { earlyCandidate = entry }
+        else { denied += 1; noTokens = entry }
     }
 
     @ViewBuilder
@@ -155,6 +177,16 @@ private struct EntryCard: View {
 
     private var ready: Bool { entry.isReady(at: now) && !entry.isPendingDeletion }
 
+    private var placeholder: String {
+        // AES-GCM adds 28 bytes (nonce + tag) to the plaintext.
+        let length = min(140, max(24, entry.cipher.count - 28))
+        let words = ["quiet", "today", "felt", "the", "and", "morning", "something", "I", "was", "light", "still", "about"]
+        var out = ""
+        var i = Int(entry.id.uuid.0)
+        while out.count < length { out += words[i % words.count] + " "; i += 7 }
+        return String(out.prefix(length))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -163,7 +195,9 @@ private struct EntryCard: View {
                 Spacer()
                 status
             }
-            Text(String(entry.plainText().prefix(140)))
+            // Never decrypt for the list: the preview is blurred anyway, so a
+            // placeholder of similar length looks the same and keeps scrolling smooth.
+            Text(placeholder)
                 .font(.system(size: 15))
                 .lineLimit(2)
                 .foregroundStyle(ready ? Color(white: 0.25) : Theme.secondary)
@@ -207,8 +241,16 @@ private struct EntryCard: View {
 
     @ViewBuilder private var footer: some View {
         if ready {
-            Label("Reveal for 60 seconds", systemImage: "clock")
-                .font(.footnote.weight(.semibold))
+            HStack {
+                Label("Reveal for 60 seconds", systemImage: "clock")
+                    .font(.footnote.weight(.semibold))
+                Spacer()
+                if entry.wasOpenedEarly {
+                    Text("Opened early")
+                        .font(.caption)
+                        .foregroundStyle(Color(white: 0.35))
+                }
+            }
         } else if entry.source == .voice {
             Label("Voice entry", systemImage: "waveform")
                 .font(.footnote)
@@ -218,6 +260,16 @@ private struct EntryCard: View {
                 .font(.footnote)
                 .foregroundStyle(Theme.tertiary)
         }
+    }
+}
+
+/// Gives list cards the same quick press response as the app's buttons.
+private struct PressableCardStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

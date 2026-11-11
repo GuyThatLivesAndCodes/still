@@ -23,7 +23,6 @@ final class WatchLink: NSObject, WCSessionDelegate {
 
     var days: Int
     var deadline: Date?
-    var paused: Bool
     var visible: Bool
 
     override init() {
@@ -31,7 +30,6 @@ final class WatchLink: NSObject, WCSessionDelegate {
         days = d.integer(forKey: "days")
         let dl = d.double(forKey: "deadline")
         deadline = dl > 0 ? Date(timeIntervalSince1970: dl) : nil
-        paused = d.bool(forKey: "paused")
         visible = d.object(forKey: "visible") as? Bool ?? true
         super.init()
         if WCSession.isSupported() {
@@ -49,7 +47,7 @@ final class WatchLink: NSObject, WCSessionDelegate {
     }
 
     func remaining(at now: Date) -> TimeInterval? {
-        guard visible, !paused, days > 0, let deadline, deadline > now else { return nil }
+        guard visible, days > 0, let deadline, deadline > now else { return nil }
         return deadline.timeIntervalSince(now)
     }
 
@@ -58,12 +56,10 @@ final class WatchLink: NSObject, WCSessionDelegate {
         Task { @MainActor in
             days = context["days"] as? Int ?? 0
             deadline = (context["deadline"] as? TimeInterval).map(Date.init(timeIntervalSince1970:))
-            paused = context["paused"] as? Bool ?? false
             visible = context["visible"] as? Bool ?? true
             let d = UserDefaults.standard
             d.set(days, forKey: "days")
             d.set(deadline?.timeIntervalSince1970 ?? 0, forKey: "deadline")
-            d.set(paused, forKey: "paused")
             d.set(visible, forKey: "visible")
             WidgetCenter.shared.reloadAllTimelines()
         }

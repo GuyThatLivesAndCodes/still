@@ -6,9 +6,6 @@ struct StreakState: Codable, Equatable {
     /// Start of the current 36-hour window.
     var anchor: Date?
     var lastCreditedDay: Date?
-    var pauseRequestedAt: Date?
-    var pausedAt: Date?
-    var resumeRequestedAt: Date?
     var revivesYear: Int = 0
     var revivesUsed: Int = 0
 }
@@ -16,7 +13,6 @@ struct StreakState: Codable, Equatable {
 @Observable
 final class StreakStore {
     static let window: TimeInterval = 36 * 3600
-    static let switchDelay: TimeInterval = 6 * 3600
     static let revivesPerYear = 2
 
     private(set) var state: StreakState
@@ -24,21 +20,32 @@ final class StreakStore {
 
     init() {
         if let data = UserDefaults.standard.data(forKey: storageKey),
-           let decoded = try? JSONDecoder().decode(StreakState.self, from: data) {
+           var decoded = try? JSONDecoder().decode(StreakState.self, from: data) {
+            // Pausing was removed. Anyone paused (or about to be) gets a fresh
+            // 36-hour window instead of a streak that silently expired.
+            if let legacy = try? JSONDecoder().decode(LegacyPause.self, from: data),
+               legacy.pausedAt != nil || legacy.pauseRequestedAt != nil,
+               decoded.days > 0 {
+                decoded.anchor = .now
+            }
             state = decoded
         } else {
             state = StreakState()
         }
-        refresh()
+        save()
+    }
+
+    private struct LegacyPause: Decodable {
+        var pausedAt: Date?
+        var pauseRequestedAt: Date?
     }
 
     // MARK: Derived
 
-    var isPaused: Bool { state.pausedAt != nil }
     var days: Int { state.days }
 
     var deadline: Date? {
-        guard !isPaused, state.days > 0, let anchor = state.anchor else { return nil }
+        guard state.days > 0, let anchor = state.anchor else { return nil }
         return anchor.addingTimeInterval(Self.window)
     }
 
@@ -48,7 +55,7 @@ final class StreakStore {
     }
 
     func isActive(at now: Date = .now) -> Bool {
-        state.days > 0 && !isPaused && !isExpired(at: now)
+        state.days > 0 && !isExpired(at: now)
     }
 
     /// Time left in the current window; nil when there is no running streak.
@@ -57,9 +64,6 @@ final class StreakStore {
         return deadline.timeIntervalSince(now)
     }
 
-    var pauseEffectiveAt: Date? { state.pauseRequestedAt?.addingTimeInterval(Self.switchDelay) }
-    var resumeEffectiveAt: Date? { state.resumeRequestedAt?.addingTimeInterval(Self.switchDelay) }
-
     var revivesLeft: Int {
         let year = Calendar.current.component(.year, from: .now)
         return state.revivesYear == year ? max(0, Self.revivesPerYear - state.revivesUsed) : Self.revivesPerYear
@@ -67,27 +71,7 @@ final class StreakStore {
 
     // MARK: Mutations
 
-    /// Applies pending pause/resume requests whose 6-hour wait has passed.
-    func refresh(now: Date = .now) {
-        var s = state
-        var changed = false
-        if let effective = pauseEffectiveAt, now >= effective {
-            s.pausedAt = effective
-            s.pauseRequestedAt = nil
-            changed = true
-        }
-        if let effective = resumeEffectiveAt, now >= effective {
-            s.pausedAt = nil
-            s.resumeRequestedAt = nil
-            if s.days > 0 { s.anchor = effective }
-            changed = true
-        }
-        if changed { state = s; save() }
-    }
-
     func recordEntry(at now: Date = .now) {
-        refresh(now: now)
-        guard !isPaused else { return }
         let cal = Calendar.current
         if state.days == 0 || isExpired(at: now) {
             state.days = 1
@@ -112,28 +96,6 @@ final class StreakStore {
         state.anchor = now
         save()
         return true
-    }
-
-    func requestPause(at now: Date = .now) {
-        guard !isPaused, state.pauseRequestedAt == nil else { return }
-        state.pauseRequestedAt = now
-        save()
-    }
-
-    func cancelPauseRequest() {
-        state.pauseRequestedAt = nil
-        save()
-    }
-
-    func requestResume(at now: Date = .now) {
-        guard isPaused, state.resumeRequestedAt == nil else { return }
-        state.resumeRequestedAt = now
-        save()
-    }
-
-    func cancelResumeRequest() {
-        state.resumeRequestedAt = nil
-        save()
     }
 
     private func save() {

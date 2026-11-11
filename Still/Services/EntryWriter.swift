@@ -34,7 +34,7 @@ enum EntryWriter {
                                    enabled: defaults.bool(forKey: "remindersEnabled"))
         let visible = defaults.object(forKey: "streakVisible") as? Bool ?? true
         let snapshot = WidgetSnapshot(days: streak.days, deadline: streak.deadline,
-                                      paused: streak.isPaused, streakVisible: visible,
+                                      streakVisible: visible,
                                       lastEntry: dates.first)
         WidgetShared.write(snapshot)
         WidgetCenter.shared.reloadAllTimelines()

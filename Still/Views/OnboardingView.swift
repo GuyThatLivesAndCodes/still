@@ -382,7 +382,7 @@ private struct StreakDemoPage: View {
     var body: some View {
         PageLayout(eyebrow: "If you like",
                    title: "Gentle, never guilty.",
-                   detail: "Write once every 36 hours to keep a streak. You get 2 free revives a year, you can pause anytime for free, or hide the streak completely.") {
+                   detail: "Write once every 36 hours to keep a streak. You get 2 free revives a year, and you can hide the streak completely.") {
             VStack(spacing: 22) {
                 Spacer()
                 HStack(alignment: .firstTextBaseline, spacing: 8) {

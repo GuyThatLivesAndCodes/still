@@ -19,9 +19,12 @@ final class Entry {
     /// Encrypted voice recording (AAC), kept outside the database row.
     @Attribute(.externalStorage) var audioCipher: Data?
     var audioDuration: Double = 0
+    /// Set when a token opens the entry early. From then on it behaves as if
+    /// its open date has passed: it still reseals after each 60-second view.
+    var revealedEarlyAt: Date?
 
     static let sealDays = 14
-    static let deletionWait: TimeInterval = 6 * 3600
+    static let deletionWait: TimeInterval = 2 * 3600
 
     init(cipher: Data, source: EntrySource, createdAt: Date = .now) {
         self.id = UUID()
@@ -43,7 +46,9 @@ final class Entry {
     /// Always derived from the creation day, so older entries follow the same rule.
     var opensAt: Date { Entry.opensAt(for: createdAt) }
 
-    func isReady(at now: Date = .now) -> Bool { now >= opensAt }
+    func isReady(at now: Date = .now) -> Bool { revealedEarlyAt != nil || now >= opensAt }
+
+    var wasOpenedEarly: Bool { revealedEarlyAt != nil && Date.now < opensAt }
 
     var deletionConfirmableAt: Date? {
         deletionRequestedAt?.addingTimeInterval(Entry.deletionWait)
