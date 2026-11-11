@@ -43,6 +43,8 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSFaceIDUsageDescription: still. uses Face ID to keep your journal private.
+        NSMicrophoneUsageDescription: still. records your voice when you choose to speak an entry instead of typing it.
+        NSSpeechRecognitionUsageDescription: still. turns your voice entries into text on this iPhone. Nothing is sent anywhere.
         ITSAppUsesNonExemptEncryption: false
         StillAIEndpoint: $(STILL_AI_ENDPOINT)
     settings:

@@ -14,11 +14,24 @@ struct TodayView: View {
     @State private var errorMessage: String?
     @State private var handledWriteRequest = 0
     @State private var openers: [String] = []
+    @State private var alertTitle = "Couldn't seal this entry"
+    @Environment(\.scenePhase) private var scenePhase
 
-    private var expanded: Bool { isEditing || !text.isEmpty }
+    // Voice entries
+    @State private var recorder = VoiceRecorder()
+    @State private var player = VoicePlayer()
+    @State private var take: VoiceTake?
+    @State private var textBeforeVoice = ""
+    @State private var textAfterVoice = ""
+    @State private var noTranscript = false
+
+    private var recording: Bool { recorder.state != .idle }
+    private var expanded: Bool { isEditing || !text.isEmpty || recording || take != nil }
     /// Openers show whenever the box isn't selected (hidden the moment it's tapped open).
-    private var showOpener: Bool { !focused && !(isEditing && text.isEmpty) }
-    private var canSeal: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var showOpener: Bool { !focused && !recording && !(isEditing && text.isEmpty) }
+    private var canSeal: Bool {
+        !recording && (take != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
 
     var body: some View {
         ZStack {
@@ -41,12 +54,20 @@ struct TodayView: View {
                     .allowsHitTesting(showOpener)
 
                 composer
+                    .layoutPriority(1)
 
-                Text("Sealed for 14 days once you let it go.")
+                VoiceControl(recorder: recorder, player: player, take: take,
+                             onStart: startRecording, onStop: stopRecording, onRemove: removeTake)
+                    .padding(.top, 12)
+
+                Text(footnote)
                     .font(.footnote)
                     .foregroundStyle(Theme.tertiary)
-                    .padding(.top, 14)
+                    .multilineTextAlignment(.center)
+                    .contentTransition(.opacity)
+                    .padding(.top, 10)
                     .opacity(expanded ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.2), value: footnote)
 
                 Spacer(minLength: 24)
 
@@ -66,8 +87,24 @@ struct TodayView: View {
             let loaded = await OpenerFeed.load()
             withAnimation(.easeOut(duration: 0.6)) { openers = loaded }
         }
+        .onChange(of: recorder.transcript) { _, spoken in
+            guard recording, !spoken.isEmpty else { return }
+            text = textBeforeVoice.isEmpty ? spoken : textBeforeVoice + "\n\n" + spoken
+        }
+        .onChange(of: recorder.state) { old, new in
+            if old == .finishing && new == .idle { finishTake() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active && recorder.isRecording { stopRecording() }
+        }
+        .onDisappear {
+            if recorder.isRecording { stopRecording() }
+            player.stop()
+        }
+        .sensoryFeedback(.start, trigger: recorder.isRecording) { _, now in now }
+        .sensoryFeedback(.stop, trigger: recorder.isRecording) { was, now in was && !now }
         .onChange(of: focused) { _, isFocused in
-            if !isFocused && text.isEmpty {
+            if !isFocused && text.isEmpty && !recording && take == nil {
                 withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { isEditing = false }
             }
         }
@@ -77,7 +114,7 @@ struct TodayView: View {
         .fullScreenCover(item: $sealedEntry) { entry in
             SealedView(entry: entry)
         }
-        .alert("Couldn't seal this entry", isPresented: Binding(
+        .alert(alertTitle, isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
@@ -92,6 +129,7 @@ struct TodayView: View {
             if expanded {
                 TextEditor(text: $text)
                     .focused($focused)
+                    .disabled(recording)
                     .scrollContentBackground(.hidden)
                     .font(.system(size: 17))
                     .lineSpacing(4)
@@ -99,6 +137,15 @@ struct TodayView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                     .transition(.opacity)
+                if recording && text.isEmpty {
+                    Text(recorder.transcribing ? "Listening…" : "Recording…")
+                        .font(.system(size: 17))
+                        .foregroundStyle(Theme.tertiary)
+                        .padding(.horizontal, 19)
+                        .padding(.vertical, 20)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
             } else {
                 Button(action: beginEditing) {
                     HStack(spacing: 10) {
@@ -116,7 +163,9 @@ struct TodayView: View {
             }
         }
         .frame(maxWidth: expanded ? .infinity : 270)
-        .frame(height: expanded ? 220 : 52)
+        // Shrinks (down to 120) on short screens when the keyboard is up, so the
+        // voice control and Seal button never get pushed under it.
+        .frame(minHeight: expanded ? 120 : 52, maxHeight: expanded ? 220 : 52)
         .glass(expanded ? 24 : 26)
         .shadow(color: .black.opacity(expanded ? 0.5 : 0), radius: 30, y: 16)
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: expanded)
@@ -136,17 +185,87 @@ struct TodayView: View {
         }
     }
 
+    private var footnote: String {
+        if recorder.isRecording {
+            let left = VoiceRecorder.maxDuration - recorder.elapsed
+            if left <= 30 { return "Stops in \(Int(left.rounded(.up)))s." }
+            return recorder.transcribing ? "Transcribing on this iPhone. Nothing leaves it."
+                                         : "Recording audio only. Transcription isn't available here."
+        }
+        if noTranscript && take != nil { return "No transcript this time. Your recording is kept." }
+        return "Sealed for 14 days once you let it go."
+    }
+
+    private func startRecording() {
+        player.stop()
+        Task { @MainActor in
+            let granted = await VoiceRecorder.requestPermissions()
+            guard granted.mic else {
+                show("Microphone is off", VoiceRecorder.RecorderError.micDenied.localizedDescription)
+                return
+            }
+            focused = false
+            textBeforeVoice = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            noTranscript = false
+            do {
+                try recorder.start(transcribe: granted.speech)
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { isEditing = true }
+            } catch {
+                show("Couldn't record", error.localizedDescription)
+            }
+        }
+    }
+
+    private func stopRecording() { recorder.stop() }
+
+    private func finishTake() {
+        guard let url = recorder.recordingURL, recorder.elapsed >= 0.5 else {
+            recorder.discard()
+            return
+        }
+        player.load(url)
+        textAfterVoice = text
+        noTranscript = recorder.transcript.isEmpty
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            take = VoiceTake(url: url, duration: player.duration > 0 ? player.duration : recorder.elapsed)
+        }
+    }
+
+    private func removeTake() {
+        player.stop()
+        recorder.discard()
+        // Drop the transcript too, unless it was edited by hand.
+        if text == textAfterVoice { text = textBeforeVoice }
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { take = nil }
+        noTranscript = false
+    }
+
+    private func show(_ title: String, _ message: String) {
+        alertTitle = title
+        errorMessage = message
+    }
+
     private func seal() {
         guard canSeal else { return }
         do {
-            let entry = try EntryWriter.seal(text, source: .text, context: context, streak: streak)
+            let audio = take.flatMap { try? Data(contentsOf: $0.url) }
+            if take != nil && audio == nil {
+                show("Couldn't seal this entry", "The recording couldn't be read. Please try again.")
+                return
+            }
+            let entry = try EntryWriter.seal(text, source: take != nil ? .voice : .text,
+                                             audio: audio, audioDuration: take?.duration ?? 0,
+                                             context: context, streak: streak)
+            player.stop()
+            recorder.discard()
+            take = nil
             focused = false
             text = ""
             isEditing = false
             sealCount += 1
             sealedEntry = entry
         } catch {
-            errorMessage = "Your words are still here. Please try again."
+            show("Couldn't seal this entry", "Your words are still here. Please try again.")
         }
     }
 }
