@@ -3,8 +3,8 @@ import SwiftUI
 /// Plain-language Terms of Use and Privacy Policy. Bump `version` whenever
 /// either changes; users are asked to accept again.
 enum LegalText {
-    static let version = 1
-    static let effective = "November 8, 2026"
+    static let version = 2
+    static let effective = "November 11, 2026"
 
     struct Section: Identifiable {
         let title: String
@@ -31,9 +31,13 @@ enum LegalText {
 
     static let privacy: [Section] = [
         Section(title: "What we collect",
-                body: "Nothing. still. has no account, no analytics, no advertising, and no tracking. We never see what you write."),
+                body: "Nothing. still. has no account, no analytics, no advertising, and no tracking. We don't keep anything you write."),
         Section(title: "Where your journal lives",
                 body: "Entries are encrypted on your iPhone with AES-256-GCM before they are saved. The encryption key is stored in the iOS Keychain and never leaves the device."),
+        Section(title: "Quiet AI",
+                body: "Quiet AI writes short notes after you write and suggests openers from your recent writing. By default it uses Apple's on-device model, so nothing leaves your iPhone. You can choose Automatic, on this iPhone only, Cloudflare only, or off in You → Quiet AI."),
+        Section(title: "Cloudflare (only if you allow it)",
+                body: "Cloudflare is off until you turn it on. When it's used, only the text needed for one note or prompt is sent over HTTPS to a still. server on Cloudflare, processed by an AI model, and discarded. It isn't logged, stored, linked to you, or used for training or advertising. Cloudflare may briefly see your IP address to deliver and rate-limit the request."),
         Section(title: "Apple Watch",
                 body: "If you write on Apple Watch, the text is sent directly to your iPhone through Apple's encrypted watch connection, then encrypted and sealed there. The watch keeps it only until your iPhone receives it."),
         Section(title: "Widgets and reminders",
@@ -41,7 +45,7 @@ enum LegalText {
         Section(title: "Face ID",
                 body: "Face ID is handled entirely by iOS. still. never receives your biometric data."),
         Section(title: "If this ever changes",
-                body: "If a future feature needs to send anything off your device, it will be off by default, explained in plain words, and only turned on with your permission.")
+                body: "If a feature ever needs to send anything off your device, it will be off by default, explained in plain words, and only turned on with your permission, just like Cloudflare for Quiet AI.")
     ]
 }
 

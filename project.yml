@@ -44,9 +44,14 @@ targets:
           - UIInterfaceOrientationPortrait
         NSFaceIDUsageDescription: still. uses Face ID to keep your journal private.
         ITSAppUsesNonExemptEncryption: false
+        StillAIEndpoint: $(STILL_AI_ENDPOINT)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.guythatlives.still
+        # Cloudflare Worker URL for Quiet AI (see worker/README.md). Empty = cloud option hidden.
+        STILL_AI_ENDPOINT: ""
+        # Apple's on-device model is iOS 26+; weak-link so iOS 17–18 still launch.
+        OTHER_LDFLAGS: "$(inherited) -weak_framework FoundationModels"
         PRODUCT_NAME: Still
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

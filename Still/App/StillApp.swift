@@ -15,6 +15,7 @@ struct StillApp: App {
         } catch {
             fatalError("Could not open the journal store: \(error)")
         }
+        OpenerFeed.provider = AIOpeners(container: container)
     }
 
     var body: some Scene {
@@ -37,7 +38,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     case today, vault, notes, streak, you
     var id: String { rawValue }
 
-    /// Notes stay hidden until the reflection server exists.
+    /// Notes stay hidden while AI is off or unavailable on this iPhone.
     static var visible: [AppTab] {
         allCases.filter { $0 != .notes || ReflectionQueue.isEnabled }
     }
