@@ -21,21 +21,28 @@ struct OpenerCarousel: View {
         openers.isEmpty ? "" : openers[index % openers.count]
     }
 
+    private var textBlur: CGFloat { shown || reduceMotion ? 0 : 6 }
+
+    private var textOpacity: Double {
+        guard shown else { return 0 }
+        return 1 - min(Double(abs(drag)) / 160, 0.6)
+    }
+
     var body: some View {
-        Text(current)
+        Text(verbatim: current)
             .font(.system(size: 19, weight: .regular))
             .foregroundStyle(Theme.tertiary)
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .minimumScaleFactor(0.85)
             .frame(maxWidth: .infinity)
-            .blur(radius: shown || reduceMotion ? 0 : 6)
-            .opacity(shown ? 1 - min(abs(drag) / 160, 0.6) : 0)
+            .blur(radius: textBlur)
+            .opacity(textOpacity)
             .offset(x: drag)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .gesture(swipe)
-        .onTapGesture(perform: onTap)
+        .onTapGesture { onTap() }
         .task(id: TimerKey(index: index, active: active, count: openers.count)) {
             guard active, openers.count > 1 else { return }
             try? await Task.sleep(for: Self.interval)
@@ -54,7 +61,7 @@ struct OpenerCarousel: View {
             @unknown default: break
             }
         }
-        .accessibilityAction(.default, onTap)
+        .accessibilityAction(.default) { onTap() }
     }
 
     private var swipe: some Gesture {
