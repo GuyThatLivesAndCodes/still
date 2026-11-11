@@ -16,6 +16,9 @@ final class Entry {
     var cipher: Data = Data()
     var sourceRaw: String = EntrySource.text.rawValue
     var deletionRequestedAt: Date?
+    /// Encrypted voice recording (AAC), kept outside the database row.
+    @Attribute(.externalStorage) var audioCipher: Data?
+    var audioDuration: Double = 0
 
     static let sealDays = 14
     static let deletionWait: TimeInterval = 6 * 3600
@@ -50,6 +53,12 @@ final class Entry {
 
     func plainText() -> String {
         (try? EntryCipher.open(cipher)) ?? ""
+    }
+
+    var hasAudio: Bool { audioCipher != nil }
+
+    func audioData() -> Data? {
+        audioCipher.flatMap { try? EntryCipher.openData($0) }
     }
 }
 
