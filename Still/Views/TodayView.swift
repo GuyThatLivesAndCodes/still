@@ -12,8 +12,8 @@ struct TodayView: View {
     @State private var sealedEntry: Entry?
     @State private var sealCount = 0
     @State private var errorMessage: String?
-    @State private var handledWriteRequest = 0
     @State private var openers: [String] = []
+    @State private var aiOpeners: Set<String> = []
     @State private var alertTitle = "Couldn't seal this entry"
     @Environment(\.scenePhase) private var scenePhase
 
@@ -47,7 +47,7 @@ struct TodayView: View {
 
                 Spacer(minLength: 24)
 
-                OpenerCarousel(openers: openers, active: showOpener, onTap: beginEditing)
+                OpenerCarousel(openers: openers, aiOpeners: aiOpeners, active: showOpener, onTap: beginEditing)
                     .frame(height: showOpener ? 58 : 0)
                     .padding(.bottom, showOpener ? 20 : 0)
                     .opacity(showOpener ? 1 : 0)
@@ -85,7 +85,10 @@ struct TodayView: View {
         .task {
             guard openers.isEmpty else { return }
             let loaded = await OpenerFeed.load()
-            withAnimation(.easeOut(duration: 0.6)) { openers = loaded }
+            withAnimation(.easeOut(duration: 0.6)) {
+                openers = loaded.openers
+                aiOpeners = loaded.ai
+            }
         }
         .onChange(of: recorder.transcript) { _, spoken in
             guard recording, !spoken.isEmpty else { return }
@@ -172,8 +175,8 @@ struct TodayView: View {
     }
 
     private func consumeWriteRequest() {
-        guard router.writeRequest != handledWriteRequest else { return }
-        handledWriteRequest = router.writeRequest
+        guard router.writeRequest != router.handledWriteRequest else { return }
+        router.handledWriteRequest = router.writeRequest
         beginEditing()
     }
 

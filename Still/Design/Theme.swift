@@ -8,6 +8,8 @@ enum Theme {
     static let card = Color(white: 0.06)
     static let hairline = Color.white.opacity(0.09)
     static let accent = Color(red: 0.667, green: 0.706, blue: 0.941)
+    /// Anything Quiet AI wrote is purple; preset text stays gray.
+    static let ai = Color(red: 0.76, green: 0.62, blue: 1.0)
 }
 
 extension View {

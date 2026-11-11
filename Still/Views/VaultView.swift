@@ -61,33 +61,34 @@ struct VaultView: View {
             get: { noTokens != nil }, set: { if !$0 { noTokens = nil } }), presenting: noTokens) { _ in
             Button("OK", role: .cancel) {}
         } message: { entry in
-            Text("This entry opens \(Fmt.longDate(entry.opensAt)). You've used this week's early reveals; they refill next week.")
+            Text("It opens \(Fmt.longDate(entry.opensAt)). Early reveals refill next week.")
         }
         .sheet(item: $deleting) { DeleteView(entry: $0) }
-        .confirmationDialog("Reveal early?", isPresented: Binding(
+        .alert("Open this entry early?", isPresented: Binding(
             get: { earlyCandidate != nil }, set: { if !$0 { earlyCandidate = nil } }),
-            titleVisibility: .visible, presenting: earlyCandidate) { entry in
-            Button("Use 1 token to open it now") {
+            presenting: earlyCandidate) { entry in
+            Button("Not Now", role: .cancel) {}
+            Button("Open") {
                 guard wallet.spend() else { return }
                 entry.revealedEarlyAt = .now
                 try? context.save()
                 revealed += 1
                 revealing = entry
             }
-            Button("Keep it sealed", role: .cancel) {}
+            .keyboardShortcut(.defaultAction)
         } message: { _ in
-            Text("It stays open after this, just like an entry past its date. Each view still reseals after 60 seconds. You have \(wallet.available()) of \(TokenWallet.weeklyFree) early reveals left this week.")
+            Text("Uses 1 of your \(wallet.available()) early reveals this week. It stays open from now on.")
         }
-        .confirmationDialog("Delete this entry?", isPresented: Binding(
+        .alert("Delete this entry?", isPresented: Binding(
             get: { deleteCandidate != nil }, set: { if !$0 { deleteCandidate = nil } }),
-            titleVisibility: .visible, presenting: deleteCandidate) { entry in
-            Button("Start 2-hour wait", role: .destructive) {
+            presenting: deleteCandidate) { entry in
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
                 entry.deletionRequestedAt = .now
                 deleting = entry
             }
-            Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("After 2 hours you'll confirm once more. You can cancel any time before then.")
+            Text("You'll confirm once more in 2 hours. You can change your mind until then.")
         }
     }
 

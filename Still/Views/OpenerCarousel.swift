@@ -4,6 +4,8 @@ import SwiftUI
 /// Fades to the next one every 15 seconds; swipe left for next, right for previous.
 struct OpenerCarousel: View {
     let openers: [String]
+    /// Openers the AI wrote; shown in purple instead of gray.
+    var aiOpeners: Set<String> = []
     /// When false the carousel is hidden and its timer stops.
     let active: Bool
     var onTap: () -> Void = {}
@@ -31,7 +33,8 @@ struct OpenerCarousel: View {
     var body: some View {
         Text(verbatim: current)
             .font(.system(size: 19, weight: .regular))
-            .foregroundStyle(Theme.tertiary)
+            .foregroundStyle(aiOpeners.contains(current) ? Theme.ai : Theme.tertiary)
+            .animation(.easeInOut(duration: 0.3), value: current)
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .minimumScaleFactor(0.85)

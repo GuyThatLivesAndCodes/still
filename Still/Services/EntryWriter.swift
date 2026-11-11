@@ -48,6 +48,9 @@ enum EntryWriter {
 final class AppRouter {
     static let shared = AppRouter()
     var writeRequest = 0
+    /// Last request Today acted on. Lives here, not in the view, so switching
+    /// back to Today doesn't replay an old widget tap and focus the text box.
+    var handledWriteRequest = 0
 
     func requestWrite() { writeRequest += 1 }
 

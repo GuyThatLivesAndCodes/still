@@ -15,9 +15,10 @@ enum OpenerFeed {
     static var provider: OpenerProvider = NoPersonalOpeners()
 
     /// Personal openers first, then the starter set in a fresh order.
-    static func load() async -> [String] {
+    /// `ai` holds the ones the AI wrote, so the UI can color them.
+    static func load() async -> (openers: [String], ai: Set<String>) {
         let personal = await provider.personalOpeners()
         let starters = Openers.starter.shuffled().filter { !personal.contains($0) }
-        return personal + starters
+        return (personal + starters, Set(personal))
     }
 }
