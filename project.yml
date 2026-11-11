@@ -82,6 +82,7 @@ targets:
     platform: watchOS
     sources:
       - Watch
+      - path: Shared/Openers.swift
     dependencies:
       - target: StillWatchWidgets
         embed: true
@@ -106,6 +107,7 @@ targets:
     platform: watchOS
     sources:
       - WatchWidgets
+      - path: Shared/Openers.swift
     info:
       path: WatchWidgets/Info.plist
       properties:

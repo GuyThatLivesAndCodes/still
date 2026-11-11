@@ -55,7 +55,7 @@ struct VaultView: View {
             }
             Button("Keep it sealed", role: .cancel) {}
         } message: { _ in
-            Text("You have \(wallet.available()) of \(TokenWallet.monthlyFree) early reveals left this month.")
+            Text("You have \(wallet.available()) of \(TokenWallet.weeklyFree) early reveals left this week.")
         }
         .confirmationDialog("Delete this entry?", isPresented: Binding(
             get: { deleteCandidate != nil }, set: { if !$0 { deleteCandidate = nil } }),

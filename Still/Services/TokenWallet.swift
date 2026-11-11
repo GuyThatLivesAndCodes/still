@@ -1,46 +1,46 @@
 import Foundation
 import Observation
 
-/// Early-reveal tokens: 3 free per calendar month. Never needed for journaling,
+/// Early-reveal tokens: 2 free per calendar week. Never needed for journaling,
 /// privacy, or streaks.
 @Observable
 final class TokenWallet {
-    static let monthlyFree = 3
+    static let weeklyFree = 2
 
-    private(set) var monthKey: String
+    private(set) var weekKey: String
     private(set) var used: Int
 
     init() {
-        monthKey = UserDefaults.standard.string(forKey: "still.tokens.month") ?? ""
-        used = UserDefaults.standard.integer(forKey: "still.tokens.used")
+        weekKey = UserDefaults.standard.string(forKey: "still.tokens.week") ?? ""
+        used = UserDefaults.standard.integer(forKey: "still.tokens.weekUsed")
     }
 
     private static func key(for date: Date) -> String {
-        let c = Calendar.current.dateComponents([.year, .month], from: date)
-        return "\(c.year ?? 0)-\(c.month ?? 0)"
+        let c = Calendar.current.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        return "\(c.yearForWeekOfYear ?? 0)-W\(c.weekOfYear ?? 0)"
     }
 
     func available(at now: Date = .now) -> Int {
-        monthKey == Self.key(for: now) ? max(0, Self.monthlyFree - used) : Self.monthlyFree
+        weekKey == Self.key(for: now) ? max(0, Self.weeklyFree - used) : Self.weeklyFree
     }
 
     var nextReset: Date {
         let cal = Calendar.current
-        let start = cal.date(from: cal.dateComponents([.year, .month], from: .now)) ?? .now
-        return cal.date(byAdding: .month, value: 1, to: start) ?? .now
+        return cal.dateInterval(of: .weekOfYear, for: .now)?.end
+            ?? cal.date(byAdding: .day, value: 7, to: cal.startOfDay(for: .now)) ?? .now
     }
 
     @discardableResult
     func spend(at now: Date = .now) -> Bool {
         let current = Self.key(for: now)
-        if monthKey != current {
-            monthKey = current
+        if weekKey != current {
+            weekKey = current
             used = 0
         }
-        guard used < Self.monthlyFree else { return false }
+        guard used < Self.weeklyFree else { return false }
         used += 1
-        UserDefaults.standard.set(monthKey, forKey: "still.tokens.month")
-        UserDefaults.standard.set(used, forKey: "still.tokens.used")
+        UserDefaults.standard.set(weekKey, forKey: "still.tokens.week")
+        UserDefaults.standard.set(used, forKey: "still.tokens.weekUsed")
         return true
     }
 }

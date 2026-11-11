@@ -88,7 +88,7 @@ struct WriteWidgetView: View {
         case .accessoryRectangular:
             VStack(alignment: .leading, spacing: 2) {
                 Text("still.").font(.headline).widgetAccentable()
-                Text(entry.snapshot.wroteToday(at: entry.date) ? "Something else on your mind?" : "What's here right now?")
+                Text(entry.snapshot.wroteToday(at: entry.date) ? "Something else on your mind?" : Openers.forDay(entry.date))
                     .font(.caption)
                     .lineLimit(2)
             }
@@ -103,7 +103,7 @@ struct WriteWidgetView: View {
     }
 
     private var prompt: String {
-        entry.snapshot.wroteToday(at: entry.date) ? "Anything else?" : "What's here right now?"
+        entry.snapshot.wroteToday(at: entry.date) ? "Anything else?" : Openers.forDay(entry.date)
     }
 
     private var small: some View {
@@ -145,6 +145,7 @@ struct WriteWidgetView: View {
                     .font(.system(size: 15, weight: .medium))
                 Text(prompt)
                     .font(.system(size: 16))
+                    .lineLimit(2)
                 Spacer()
             }
             .foregroundStyle(W.secondary)

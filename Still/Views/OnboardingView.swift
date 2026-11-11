@@ -217,7 +217,7 @@ private struct WriteDemoPage: View {
                         Button(action: expand) {
                             HStack(spacing: 10) {
                                 Image(systemName: "pencil.line")
-                                Text("What's here right now?")
+                                Text("Write")
                             }
                             .foregroundStyle(Theme.secondary)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -319,7 +319,7 @@ private struct RevealDemoPage: View {
     var body: some View {
         PageLayout(eyebrow: "Step three",
                    title: "Let it go.",
-                   detail: "When an entry opens, you can read it for 60 seconds before it reseals. If you really need one sooner, you get 3 early reveals a month.") {
+                   detail: "When an entry opens, you can read it for 60 seconds before it reseals. If you really need one sooner, you get 2 early reveals a week.") {
             VStack(spacing: 18) {
                 Spacer()
                 VStack(alignment: .leading, spacing: 10) {

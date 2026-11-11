@@ -13,8 +13,11 @@ struct TodayView: View {
     @State private var sealCount = 0
     @State private var errorMessage: String?
     @State private var handledWriteRequest = 0
+    @State private var openers: [String] = []
 
     private var expanded: Bool { isEditing || !text.isEmpty }
+    /// Openers show whenever the box isn't selected (hidden the moment it's tapped open).
+    private var showOpener: Bool { !focused && !(isEditing && text.isEmpty) }
     private var canSeal: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
@@ -30,6 +33,12 @@ struct TodayView: View {
                     .padding(.top, 6)
 
                 Spacer(minLength: 24)
+
+                OpenerCarousel(openers: openers, active: showOpener, onTap: beginEditing)
+                    .frame(height: showOpener ? 58 : 0)
+                    .padding(.bottom, showOpener ? 20 : 0)
+                    .opacity(showOpener ? 1 : 0)
+                    .allowsHitTesting(showOpener)
 
                 composer
 
@@ -50,6 +59,12 @@ struct TodayView: View {
                 .padding(.bottom, 12)
             }
             .padding(.horizontal, 24)
+            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: showOpener)
+        }
+        .task {
+            guard openers.isEmpty else { return }
+            let loaded = await OpenerFeed.load()
+            withAnimation(.easeOut(duration: 0.6)) { openers = loaded }
         }
         .onChange(of: focused) { _, isFocused in
             if !isFocused && text.isEmpty {
@@ -84,21 +99,12 @@ struct TodayView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                     .transition(.opacity)
-
-                if text.isEmpty {
-                    Text("What's here right now?")
-                        .font(.system(size: 17))
-                        .foregroundStyle(Theme.tertiary)
-                        .padding(.horizontal, 19)
-                        .padding(.vertical, 20)
-                        .allowsHitTesting(false)
-                }
             } else {
                 Button(action: beginEditing) {
                     HStack(spacing: 10) {
                         Image(systemName: "pencil.line")
                             .font(.system(size: 15, weight: .medium))
-                        Text("What's here right now?")
+                        Text("Write")
                             .font(.system(size: 16))
                     }
                     .foregroundStyle(Theme.secondary)

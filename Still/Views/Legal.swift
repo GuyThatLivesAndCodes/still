@@ -18,7 +18,7 @@ enum LegalText {
         Section(title: "Not a substitute for care",
                 body: "still. is not therapy, medical advice, or a crisis service. If you are in danger or thinking about harming yourself, contact local emergency services right away. In the US you can call or text 988."),
         Section(title: "Sealed means sealed",
-                body: "Entries can't be edited once sealed. They open at the start of the 14th day after you write them. Early reveals use tokens; you get 3 free each month. Tokens are never needed to write, to keep your journal private, or to keep a streak."),
+                body: "Entries can't be edited once sealed. They open at the start of the 14th day after you write them. Early reveals use tokens; you get 2 free each week. Tokens are never needed to write, to keep your journal private, or to keep a streak."),
         Section(title: "Deletion is permanent",
                 body: "Deleting an entry takes a 6-hour wait and a second confirmation. After that it is erased and cannot be recovered by anyone, including us."),
         Section(title: "Your responsibility for your device",
