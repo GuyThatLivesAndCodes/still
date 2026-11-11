@@ -430,7 +430,7 @@ private struct PrivacyIntroPage: View {
         ("lock.shield", "Encrypted on your iPhone"),
         ("person.crop.circle.badge.xmark", "No account, ads, or tracking"),
         ("faceid", "Optional Face ID lock"),
-        ("iphone", "Never leaves this device")
+        ("iphone", "Stays here unless you allow it")
     ]
 
     var body: some View {

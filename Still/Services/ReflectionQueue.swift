@@ -1,16 +1,25 @@
 import Foundation
 import SwiftData
 
-/// Something that can write a short, warm reflection. Implemented later by a
-/// server-side proxy; until one is set, nothing leaves the device.
+/// Something that can write a short, warm reflection.
 protocol ReflectionProvider {
     func reflect(on entries: [String]) async throws -> String
+}
+
+/// Routes reflections through whichever engine the user's AI setting picks.
+struct AIReflections: ReflectionProvider {
+    func reflect(on entries: [String]) async throws -> String {
+        try await AIService.run(.reflection(entries))
+    }
 }
 
 /// Coalesces submissions: each new entry resets a 10–30 minute timer, and all
 /// entries waiting at that point share a single note.
 enum ReflectionQueue {
-    static var provider: ReflectionProvider?
+    /// Nil when AI is off or nothing is available, which also hides the Notes tab.
+    static var provider: ReflectionProvider? {
+        AIService.isActive ? AIReflections() : nil
+    }
 
     private static let idsKey = "still.reflection.pending"
     private static let fireKey = "still.reflection.fireAt"

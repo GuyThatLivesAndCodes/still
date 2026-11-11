@@ -13,6 +13,10 @@ struct YouView: View {
     @State private var showPolicy = false
     @AppStorage("replayIntro") private var replayIntro = false
     @State private var remindersDenied = false
+    @State private var showAI = false
+    // Observed so the Quiet AI row updates when the sheet changes them.
+    @AppStorage(AIService.modeKey) private var aiMode = AIMode.automatic.rawValue
+    @AppStorage(AIService.consentKey) private var aiCloudConsent = false
 
     var body: some View {
         ScrollView {
@@ -40,6 +44,23 @@ struct YouView: View {
                         }
                     }
                     .padding(16)
+                }
+
+                section("Quiet AI") {
+                    Button { showAI = true } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Notes and openers").font(.body.weight(.medium)).foregroundStyle(Theme.ink)
+                                Text(aiLine).font(.footnote).foregroundStyle(Theme.tertiary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.tertiary)
+                        }
+                        .padding(16)
+                        .frame(minHeight: 52)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 section("Privacy") {
@@ -83,6 +104,7 @@ struct YouView: View {
         }
         .scrollIndicators(.hidden)
         .sheet(isPresented: $showPrivacy) { PrivacySheet() }
+        .sheet(isPresented: $showAI) { AISettingsView() }
         .sheet(isPresented: $showTerms) { LegalSheet(title: "Terms of Use", sections: LegalText.terms) }
         .sheet(isPresented: $showPolicy) { LegalSheet(title: "Privacy Policy", sections: LegalText.privacy) }
     }
@@ -114,6 +136,15 @@ struct YouView: View {
             return "Timed to when you usually write"
         }
         return "You usually write in the \(ReminderService.periodName(forMinute: m)), around \(Fmt.timeOfDay(minute: m))"
+    }
+
+    private var aiLine: String {
+        _ = (aiMode, aiCloudConsent)
+        switch AIService.activeEngine {
+        case .onDevice: return "Running on this iPhone"
+        case .cloud: return "Running on Cloudflare"
+        case nil: return AIService.mode == .off ? "Off" : "Not available yet · tap to see options"
+        }
     }
 
     private var readyEntries: [Entry] {
@@ -182,11 +213,29 @@ struct PrivacySheet: View {
         var id: String { title }
     }
 
-    private let points: [Point] = [
+    private var points: [Point] {
+        var list = basePoints
+        list.insert(aiPoint, at: 2)
+        if AIService.cloudConsent {
+            list[1] = Point(icon: "iphone", title: "No account, no tracking",
+                            detail: "still. has no sign-in, analytics, or ads. The only thing that can leave this iPhone is text for Quiet AI on Cloudflare, which you've allowed.")
+        }
+        return list
+    }
+
+    private var aiPoint: Point {
+        AIService.cloudConsent
+            ? Point(icon: "sparkles", title: "Quiet AI",
+                    detail: "Notes and openers use Apple's on-device model when it's available. You've allowed Cloudflare, so when it's used the needed text is sent over HTTPS, answered, and discarded with no logs or storage.")
+            : Point(icon: "sparkles", title: "Quiet AI",
+                    detail: "Notes and openers only use Apple's on-device model. Cloudflare is off, so nothing you write leaves this iPhone.")
+    }
+
+    private let basePoints: [Point] = [
         Point(icon: "lock.shield", title: "Encrypted on this iPhone",
               detail: "Every entry is encrypted with AES-256-GCM before it's saved. The key is kept in the iOS Keychain and never leaves this device."),
         Point(icon: "iphone", title: "No account, no servers",
-              detail: "still. has no sign-in, analytics, or ads. In this build, nothing you write is sent anywhere."),
+              detail: "still. has no sign-in, analytics, or ads. Nothing you write is sent anywhere."),
         Point(icon: "exclamationmark.triangle", title: "Device-bound by design",
               detail: "Because the key never leaves this iPhone, entries can't be restored on a different device. Export opened entries if you want a copy."),
         Point(icon: "faceid", title: "Face ID stays with iOS",

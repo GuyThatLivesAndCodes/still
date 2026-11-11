@@ -64,10 +64,10 @@ struct NotesView: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 20))
                 .foregroundStyle(Theme.accent)
-            Text("Notes aren't switched on yet")
+            Text("Quiet AI is off")
                 .font(.headline)
                 .foregroundStyle(Theme.ink)
-            Text("When they are, still. will send a short, warm note 10 to 30 minutes after you seal an entry. In this build nothing you write leaves your iPhone.")
+            Text("Turn it on in You → Quiet AI to get a short, warm note 10 to 30 minutes after you seal an entry.")
                 .font(.subheadline)
                 .foregroundStyle(Theme.secondary)
         }
