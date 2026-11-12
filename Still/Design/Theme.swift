@@ -85,6 +85,29 @@ enum Fmt {
         return "\(day) · \(period(date))"
     }
 
+    static func time(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
+    /// "Tue, Nov 3 · 9:41 PM", with the year when it isn't this year.
+    static func exact(_ date: Date) -> String {
+        let sameYear = Calendar.current.isDate(date, equalTo: .now, toGranularity: .year)
+        let day = sameYear
+            ? date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            : date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year())
+        return "\(day) · \(time(date))"
+    }
+
+    /// "Opens in 3 days", then hours, minutes, and finally seconds.
+    static func opensIn(_ t: TimeInterval) -> String {
+        let s = max(0, Int(t.rounded(.up)))
+        func unit(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
+        if s >= 86400 { return "Opens in " + unit(s / 86400, "day") }
+        if s >= 3600 { return "Opens in " + unit(s / 3600, "hour") }
+        if s >= 60 { return "Opens in " + unit(s / 60, "minute") }
+        return "Opens in " + unit(s, "second")
+    }
+
     static func shortDate(_ date: Date) -> String {
         date.formatted(.dateTime.month(.abbreviated).day())
     }

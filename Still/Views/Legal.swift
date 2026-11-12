@@ -3,8 +3,8 @@ import SwiftUI
 /// Plain-language Terms of Use and Privacy Policy. Bump `version` whenever
 /// either changes; users are asked to accept again.
 enum LegalText {
-    static let version = 2
-    static let effective = "November 11, 2026"
+    static let version = 3
+    static let effective = "November 12, 2026"
 
     struct Section: Identifiable {
         let title: String
@@ -18,7 +18,7 @@ enum LegalText {
         Section(title: "Not a substitute for care",
                 body: "still. is not therapy, medical advice, or a crisis service. If you are in danger or thinking about harming yourself, contact local emergency services right away. In the US you can call or text 988."),
         Section(title: "Sealed means sealed",
-                body: "Entries can't be edited once sealed. They open at the start of the 14th day after you write them. Early reveals use tokens; you get 2 free each week. An entry opened early stays open afterward. Tokens are never needed to write, to keep your journal private, or to keep a streak."),
+                body: "Entries can't be edited once sealed. They open at the start of the 5th day after you write them. Early reveals use tokens; you get 2 free each week. An entry opened early stays open afterward, and its token is returned on the day it would have opened anyway. Tokens are never needed to write, to keep your journal private, or to keep a streak."),
         Section(title: "Deletion is permanent",
                 body: "Deleting an entry takes a 2-hour wait and a second confirmation. After that it is erased and cannot be recovered by anyone, including us."),
         Section(title: "Your responsibility for your device",
@@ -35,13 +35,13 @@ enum LegalText {
         Section(title: "Where your journal lives",
                 body: "Entries are encrypted on your iPhone with AES-256-GCM before they are saved. The encryption key is stored in the iOS Keychain and never leaves the device."),
         Section(title: "Quiet AI",
-                body: "Quiet AI writes short notes after you write and suggests openers from your recent writing. By default it uses Apple's on-device model, so nothing leaves your iPhone. You can choose Automatic, on this iPhone only, Cloudflare only, or off in You → Quiet AI."),
+                body: "Quiet AI writes short notes after you write, replies when you chat with it about a note, suggests openers, and can write your daily reminder. It uses your recent entries, notes and chats for this, plus your name, age and gender if you add them in You → About you (your exact birthday is never shared). By default it uses Apple's on-device model, so nothing leaves your iPhone. You can choose Automatic, on this iPhone only, Cloudflare only, or off in You → Quiet AI."),
         Section(title: "Cloudflare (only if you allow it)",
-                body: "Cloudflare is off until you turn it on. When it's used, only the text needed for one note or prompt is sent over HTTPS to a still. server on Cloudflare, processed by an AI model, and discarded. It isn't logged, stored, linked to you, or used for training or advertising. Cloudflare may briefly see your IP address to deliver and rate-limit the request."),
+                body: "Cloudflare is off until you turn it on. When it's used, only the text needed for one note, reply, reminder or prompt (and the details from About you, if you added any) is sent over HTTPS to a still. server on Cloudflare, processed by an AI model, and discarded. It isn't logged, stored, linked to you, or used for training or advertising. Cloudflare may briefly see your IP address to deliver and rate-limit the request."),
         Section(title: "Apple Watch",
                 body: "If you write on Apple Watch, the text is sent directly to your iPhone through Apple's encrypted watch connection, then encrypted and sealed there. The watch keeps it only until your iPhone receives it."),
         Section(title: "Widgets and reminders",
-                body: "Widgets see only your streak count and timing, never entry text. Reminders are scheduled locally on your iPhone; no server sends them."),
+                body: "Widgets see only your streak count and timing, never entry text. Reminders and notifications are scheduled locally on your iPhone; no server sends them. They never show the text of your entries, notes or chats."),
         Section(title: "Face ID",
                 body: "Face ID is handled entirely by iOS. still. never receives your biometric data."),
         Section(title: "If this ever changes",

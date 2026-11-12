@@ -53,7 +53,8 @@ enum ReminderService {
         guard var fire = wroteToday ? at(dayOffset: 1) : at(dayOffset: 0) else { return }
         if fire <= now.addingTimeInterval(60), let tomorrow = at(dayOffset: 1) { fire = tomorrow }
 
-        var body = "Take a moment for yourself today."
+        let aiLine = NudgeWriter.current
+        var body = aiLine ?? "Take a moment for yourself today."
         if let deadline = streak.deadline, deadline > now {
             // Never let the reminder land after the streak would end.
             if fire > deadline.addingTimeInterval(-3600) {
@@ -61,7 +62,7 @@ enum ReminderService {
                 if earlier > now.addingTimeInterval(60) { fire = earlier }
             }
             let hoursLeft = Int(deadline.timeIntervalSince(fire) / 3600)
-            if hoursLeft >= 1 {
+            if hoursLeft >= 1 && body.count <= 80 {
                 body += " You have \(hoursLeft) hour\(hoursLeft == 1 ? "" : "s") left on your streak."
             }
         }

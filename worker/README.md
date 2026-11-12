@@ -2,10 +2,10 @@
 
 A tiny, stateless Cloudflare Worker that powers **Quiet AI** in still. when the iPhone can't run Apple's on-device model, or when the user picks Cloudflare.
 
-- Two endpoints only: `POST /v1/reflect` (warm note) and `POST /v1/openers` (four prompts). Body: `{ "texts": ["…"] }`. Reply: `{ "text": "…" }`.
+- Four endpoints only: `POST /v1/reflect` (warm note), `POST /v1/openers` (eight prompts), `POST /v1/chat` (reply in a note chat) and `POST /v1/nudge` (one lock-screen-safe reminder line). Body: `{ "texts": ["…"], "profile": "optional, ≤400 chars" }`; chat also takes `"messages": [{ "role": "user" | "assistant", "content": "…" }]` ending with the person. Reply: `{ "text": "…" }`.
 - Prompts live on the server (`src/prompts.js`), so it can't be used as a general chatbot.
 - Nothing is logged or stored. Observability is off, errors aren't logged, and responses are `no-store`.
-- Rate-limited per IP (20/min) and input-capped (10 texts, 4,000 chars each, 12,000 total).
+- Rate-limited per IP (20/min) and input-capped (16 texts, 4,000 chars each, 12,000 total; 16 chat turns of 1,500 chars).
 - Model: `@cf/meta/llama-3.1-8b-instruct-fp8-fast` (change `MODEL` in `wrangler.toml`). One note costs about $0.0001. Workers AI's free 10,000 neurons per day cover roughly 1,000+ requests.
 
 ## Deploy

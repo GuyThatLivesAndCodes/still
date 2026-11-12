@@ -52,8 +52,8 @@ enum Openers {
         "What's something kind you did, or someone did for you?",
         "What's making you restless?",
         "What feels heavy, and what feels light?",
-        "What do you want the next two weeks to hold?",
-        "What would you say to yourself in fourteen days?",
+        "What do you want the rest of this week to hold?",
+        "What would you say to yourself five days from now?",
         "What feeling is hiding under the obvious one?",
     ]
 

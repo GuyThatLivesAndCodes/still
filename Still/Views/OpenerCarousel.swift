@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Gray line above the composer that slowly cycles through openers.
-/// Fades to the next one every 15 seconds; swipe left for next, right for previous.
+/// Fades to the next one every 15 seconds; swipe left for next, right for previous,
+/// and hold to shuffle (the AI writes a fresh set when it can).
 struct OpenerCarousel: View {
     let openers: [String]
     /// Openers the AI wrote; shown in purple instead of gray.
@@ -9,6 +10,9 @@ struct OpenerCarousel: View {
     /// When false the carousel is hidden and its timer stops.
     let active: Bool
     var onTap: () -> Void = {}
+    /// True while a shuffle is in progress.
+    var shuffling: Bool = false
+    var onShuffle: () -> Void = {}
 
     static let interval: Duration = .seconds(15)
 
@@ -31,28 +35,36 @@ struct OpenerCarousel: View {
     }
 
     var body: some View {
-        Text(verbatim: current)
-            .font(.system(size: 19, weight: .regular))
-            .foregroundStyle(aiOpeners.contains(current) ? Theme.ai : Theme.tertiary)
-            .animation(.easeInOut(duration: 0.3), value: current)
-            .multilineTextAlignment(.center)
-            .lineLimit(2)
-            .minimumScaleFactor(0.85)
-            .frame(maxWidth: .infinity)
-            .blur(radius: textBlur)
-            .opacity(textOpacity)
-            .offset(x: drag)
+        ZStack {
+            line
+                .opacity(shuffling ? 0 : 1)
+                .blur(radius: shuffling ? 8 : 0)
+            if shuffling {
+                Label("Shuffling", systemImage: "shuffle")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Theme.ai)
+                    .symbolEffect(.pulse, options: .repeating)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: shuffling)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .gesture(swipe)
         .onTapGesture { onTap() }
-        .task(id: TimerKey(index: index, active: active, count: openers.count)) {
-            guard active, openers.count > 1 else { return }
+        .onLongPressGesture(minimumDuration: 0.45) { if !shuffling { onShuffle() } }
+        .task(id: TimerKey(index: index, active: active && !shuffling, count: openers.count)) {
+            guard active, !shuffling, openers.count > 1 else { return }
             try? await Task.sleep(for: Self.interval)
             guard !Task.isCancelled else { return }
             step(1, fade: 0.9)
         }
-        .onChange(of: openers) { _, _ in index = 0 }
+        .onChange(of: openers) { _, _ in
+            swap?.cancel()
+            target = nil
+            index = 0
+            shown = true
+        }
         .onDisappear { swap?.cancel() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(current)
@@ -65,6 +77,21 @@ struct OpenerCarousel: View {
             }
         }
         .accessibilityAction(.default) { onTap() }
+        .accessibilityAction(named: "Shuffle prompts") { onShuffle() }
+    }
+
+    private var line: some View {
+        Text(verbatim: current)
+            .font(.system(size: 19, weight: .regular))
+            .foregroundStyle(aiOpeners.contains(current) ? Theme.ai : Theme.tertiary)
+            .animation(.easeInOut(duration: 0.3), value: current)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .minimumScaleFactor(0.85)
+            .frame(maxWidth: .infinity)
+            .blur(radius: textBlur)
+            .opacity(textOpacity)
+            .offset(x: drag)
     }
 
     private var swipe: some Gesture {

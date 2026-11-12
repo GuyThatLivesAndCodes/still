@@ -4,18 +4,19 @@ import SwiftData
 @main
 struct StillApp: App {
     @State private var streak = StreakStore()
-    @State private var wallet = TokenWallet()
+    @State private var wallet = TokenWallet.shared
     @State private var lock = AppLock()
     @State private var router = AppRouter.shared
     private let container: ModelContainer
 
     init() {
         do {
-            container = try ModelContainer(for: Entry.self, Note.self)
+            container = try ModelContainer(for: Entry.self, Note.self, ChatMessage.self)
         } catch {
             fatalError("Could not open the journal store: \(error)")
         }
         OpenerFeed.provider = AIOpeners(container: container)
+        Notifier.shared.start()
     }
 
     var body: some Scene {
@@ -148,6 +149,12 @@ struct RootView: View {
             menuOpen = false
             tab = .today
         }
+        .onChange(of: router.tabRequest) { _, next in
+            guard let next else { return }
+            menuOpen = false
+            tab = AppTab.visible.contains(next) ? next : .today
+            router.tabRequest = nil
+        }
         .onChange(of: streak.state) { _, _ in
             EntryWriter.syncSurroundings(context: context, streak: streak)
         }
@@ -155,8 +162,13 @@ struct RootView: View {
             EntryWriter.syncSurroundings(context: context, streak: streak)
         }
         .task {
+            if let next = router.tabRequest {
+                tab = AppTab.visible.contains(next) ? next : .today
+                router.tabRequest = nil
+            }
             EntryWriter.syncSurroundings(context: context, streak: streak)
             await ReflectionQueue.deliverIfDue(context: context)
+            await NoteChat.retryPending(context: context)
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
@@ -164,7 +176,10 @@ struct RootView: View {
                 lock.lockIfEnabled()
             case .active:
                 EntryWriter.syncSurroundings(context: context, streak: streak)
-                Task { await ReflectionQueue.deliverIfDue(context: context) }
+                Task {
+                    await ReflectionQueue.deliverIfDue(context: context)
+                    await NoteChat.retryPending(context: context)
+                }
             default:
                 break
             }

@@ -19,7 +19,7 @@ enum EntryWriter {
         context.insert(entry)
         try context.save()
         streak.recordEntry(at: createdAt)
-        ReflectionQueue.enqueue(entry.id)
+        ReflectionQueue.enqueue(entry.id, context: context)
         syncSurroundings(context: context, streak: streak)
         return entry
     }
@@ -32,6 +32,11 @@ enum EntryWriter {
         let defaults = UserDefaults.standard
         ReminderService.reschedule(entryDates: dates, streak: streak,
                                    enabled: defaults.bool(forKey: "remindersEnabled"))
+        VaultCare.run(context: context)
+        NudgeWriter.refreshIfStale(context: context) {
+            ReminderService.reschedule(entryDates: dates, streak: streak,
+                                       enabled: UserDefaults.standard.bool(forKey: "remindersEnabled"))
+        }
         let visible = defaults.object(forKey: "streakVisible") as? Bool ?? true
         let snapshot = WidgetSnapshot(days: streak.days, deadline: streak.deadline,
                                       streakVisible: visible,
@@ -52,10 +57,26 @@ final class AppRouter {
     /// back to Today doesn't replay an old widget tap and focus the text box.
     var handledWriteRequest = 0
 
+    /// Set by a tapped notification; RootView switches tabs, Notes opens the note.
+    var tabRequest: AppTab?
+    var noteRequest: UUID?
+
     func requestWrite() { writeRequest += 1 }
 
     func handle(_ url: URL) {
         if url.scheme == "still", url.host == "write" { requestWrite() }
+    }
+
+    /// Routes from notifications: "vault", "notes", or "note:<uuid>".
+    func open(route: String) {
+        if route == "vault" {
+            tabRequest = .vault
+        } else if route.hasPrefix("note:") {
+            noteRequest = UUID(uuidString: String(route.dropFirst(5)))
+            tabRequest = .notes
+        } else if route == "notes" {
+            tabRequest = .notes
+        }
     }
 }
 

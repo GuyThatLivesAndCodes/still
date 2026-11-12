@@ -64,26 +64,47 @@ enum AIError: Error {
     case badResponse(Int)
 }
 
-/// The two jobs the AI does. Prompts live here for the on-device model and are
-/// mirrored on the server, which only accepts these two tasks.
+/// One line of a note chat, oldest first.
+struct ChatTurn {
+    let fromAI: Bool
+    let text: String
+}
+
+/// The jobs the AI does. Prompts live here for the on-device model and are
+/// mirrored on the server, which only accepts these tasks.
 enum AITask {
     case reflection([String])
     case openers([String])
+    /// A short back-and-forth about a note the AI wrote.
+    case chat(note: String, turns: [ChatTurn])
+    /// One lock-screen-safe reminder line.
+    case nudge([String])
+
+    static let openerCount = 8
 
     var path: String {
         switch self {
         case .reflection: return "reflect"
         case .openers: return "openers"
+        case .chat: return "chat"
+        case .nudge: return "nudge"
         }
     }
 
     var texts: [String] {
         switch self {
-        case .reflection(let t), .openers(let t): return t
+        case .reflection(let t), .openers(let t), .nudge(let t): return t
+        case .chat(let note, _): return [note]
         }
     }
 
+    /// Task rules plus whatever the person shared about themselves.
     var instructions: String {
+        let profile = Profile.context
+        return profile.isEmpty ? baseInstructions : baseInstructions + "\n\n" + profile
+    }
+
+    private var baseInstructions: String {
         switch self {
         case .reflection:
             return """
@@ -97,30 +118,64 @@ enum AITask {
         case .openers:
             return """
             You write gentle journaling prompts for still., a private journal. Based on the person's \
-            recent writing, write four different open questions that might help them start writing \
-            today. Each is under twelve words, kind, and specific to themes they've mentioned, without \
-            quoting them or naming private details. Output only the four questions, one per line, \
-            with no numbers or quotes.
+            recent writing, write \(AITask.openerCount) different open questions that might help them start \
+            writing today. Each is under twelve words, kind, and specific to themes they've mentioned, \
+            without quoting them or naming private details. Vary them: some about feelings, some about \
+            people, plans, small moments, or the body. Output only the questions, one per line, with no \
+            numbers or quotes.
+            """
+        case .chat:
+            return """
+            You are the quiet companion inside still., a private journal. Earlier you left the person \
+            a short note about something they wrote, and now they're talking with you about it. Reply \
+            in one to three short, warm sentences in plain words. Listen more than you advise, and ask \
+            at most one gentle question. Stay with what they've shared; never invent details. No \
+            greetings, no sign-off, no emoji, no lists. If they mention wanting to harm themselves, \
+            gently say they deserve support right now and that in the US they can call or text 988.
+            """
+        case .nudge:
+            return """
+            You write one reminder notification for still., a private journal. It invites the person \
+            to write today. Under 80 characters, warm and casual; you may use their first name. You may \
+            lightly nod to an everyday, positive or neutral theme from their writing (a hobby, a plan, \
+            something they're looking forward to). Never mention anything sensitive or private: no \
+            health or mental health, grief, trauma, self-harm, relationships or dating, sex, money, \
+            family conflict, work trouble, or anything they'd mind someone seeing on their lock screen. \
+            If nothing safe stands out, keep it general. No quotes, no emoji, no hashtags. Output only \
+            the notification text.
             """
         }
     }
 
     func prompt(limit: Int) -> String {
-        let label = { (i: Int) -> String in
-            switch self {
-            case .reflection: return "Entry \(i + 1)"
-            case .openers: return "Recent writing \(i + 1)"
-            }
+        switch self {
+        case .reflection(let t):
+            return AIService.trim(t, total: limit).enumerated()
+                .map { "Entry \($0.offset + 1):\n\($0.element)" }.joined(separator: "\n\n")
+        case .openers(let t), .nudge(let t):
+            return AIService.trim(t, total: limit).enumerated()
+                .map { "Recent writing \($0.offset + 1):\n\($0.element)" }.joined(separator: "\n\n")
+        case .chat(let note, let turns):
+            let lines = AIService.recent(turns, total: max(800, limit - 900))
+                .map { ($0.fromAI ? "You: " : "Them: ") + $0.text }
+            return "Your note to them:\n\(String(note.prefix(800)))\n\nConversation so far:\n"
+                + lines.joined(separator: "\n") + "\n\nWrite your next reply to them."
         }
-        return AIService.trim(texts, total: limit).enumerated()
-            .map { "\(label($0.offset)):\n\($0.element)" }
-            .joined(separator: "\n\n")
     }
 
     var maxTokens: Int {
         switch self {
         case .reflection: return 180
-        case .openers: return 120
+        case .openers: return 260
+        case .chat: return 160
+        case .nudge: return 60
+        }
+    }
+
+    var temperature: Double {
+        switch self {
+        case .openers, .nudge: return 0.85
+        default: return 0.7
         }
     }
 }
@@ -201,6 +256,20 @@ enum AIService {
         return kept.reversed()
     }
 
+    /// Newest chat turns that fit in `total` characters, oldest first.
+    static func recent(_ turns: [ChatTurn], total: Int) -> [ChatTurn] {
+        var budget = total
+        var kept: [ChatTurn] = []
+        for turn in turns.reversed().prefix(16) {
+            let text = String(turn.text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1200))
+            guard !text.isEmpty else { continue }
+            guard budget - text.count > 0 || kept.isEmpty else { break }
+            kept.append(ChatTurn(fromAI: turn.fromAI, text: text))
+            budget -= text.count
+        }
+        return kept.reversed()
+    }
+
     /// Turns a model's reply into clean one-line questions.
     static func parseOpeners(_ reply: String) -> [String] {
         reply.split(whereSeparator: \.isNewline)
@@ -211,7 +280,7 @@ enum AIService {
                 return s
             }
             .filter { $0.count >= 8 && $0.count <= 90 && $0.hasSuffix("?") }
-            .prefix(4)
+            .prefix(AITask.openerCount)
             .map { $0 }
     }
 }
@@ -245,7 +314,7 @@ enum AppleModel {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
             let session = LanguageModelSession(instructions: task.instructions)
-            let options = GenerationOptions(temperature: 0.7, maximumResponseTokens: task.maxTokens)
+            let options = GenerationOptions(temperature: task.temperature, maximumResponseTokens: task.maxTokens)
             // ~4K token window shared by prompt and reply, so keep the input small.
             let response = try await session.respond(to: task.prompt(limit: 5000), options: options)
             return response.content
@@ -276,7 +345,12 @@ enum CloudModel {
         return URLSession(configuration: config)
     }()
 
-    private struct Body: Encodable { let texts: [String] }
+    private struct Turn: Encodable { let role: String; let content: String }
+    private struct Body: Encodable {
+        let texts: [String]
+        let profile: String?
+        let messages: [Turn]?
+    }
     private struct Reply: Decodable { let text: String }
 
     static func respond(_ task: AITask) async throws -> String {
@@ -284,7 +358,16 @@ enum CloudModel {
         var request = URLRequest(url: base.appendingPathComponent("v1").appendingPathComponent(task.path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(Body(texts: AIService.trim(task.texts, total: 8000)))
+        var turns: [Turn]?
+        if case .chat(_, let history) = task {
+            turns = AIService.recent(history, total: 6000)
+                .map { Turn(role: $0.fromAI ? "assistant" : "user", content: $0.text) }
+        }
+        let profile = Profile.context
+        let body = Body(texts: AIService.trim(task.texts, total: 8000),
+                        profile: profile.isEmpty ? nil : String(profile.prefix(400)),
+                        messages: turns)
+        request.httpBody = try JSONEncoder().encode(body)
         let (data, response) = try await session.data(for: request)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard code == 200 else { throw AIError.badResponse(code) }

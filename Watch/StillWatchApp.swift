@@ -139,7 +139,7 @@ struct WatchHome: View {
                 .foregroundStyle(Color(white: 0.95))
             Text("Sealed.")
                 .font(.headline)
-            Text("It rests on your iPhone for 14 days.")
+            Text("It rests on your iPhone for 5 days.")
                 .font(.footnote)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)

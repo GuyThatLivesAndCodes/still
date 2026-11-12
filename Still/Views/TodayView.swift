@@ -14,6 +14,8 @@ struct TodayView: View {
     @State private var errorMessage: String?
     @State private var openers: [String] = []
     @State private var aiOpeners: Set<String> = []
+    @State private var shuffling = false
+    @State private var shuffles = 0
     @State private var alertTitle = "Couldn't seal this entry"
     @Environment(\.scenePhase) private var scenePhase
 
@@ -47,7 +49,8 @@ struct TodayView: View {
 
                 Spacer(minLength: 24)
 
-                OpenerCarousel(openers: openers, aiOpeners: aiOpeners, active: showOpener, onTap: beginEditing)
+                OpenerCarousel(openers: openers, aiOpeners: aiOpeners, active: showOpener, onTap: beginEditing,
+                               shuffling: shuffling, onShuffle: shuffleOpeners)
                     .frame(height: showOpener ? 58 : 0)
                     .padding(.bottom, showOpener ? 20 : 0)
                     .opacity(showOpener ? 1 : 0)
@@ -114,6 +117,7 @@ struct TodayView: View {
         .onChange(of: router.writeRequest) { _, _ in consumeWriteRequest() }
         .onAppear { consumeWriteRequest() }
         .sensoryFeedback(.success, trigger: sealCount)
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: shuffles)
         .fullScreenCover(item: $sealedEntry) { entry in
             SealedView(entry: entry)
         }
@@ -174,6 +178,22 @@ struct TodayView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: expanded)
     }
 
+    private func shuffleOpeners() {
+        guard !shuffling else { return }
+        shuffles += 1
+        shuffling = true
+        Task { @MainActor in
+            let started = Date.now
+            let next = await OpenerFeed.shuffle()
+            // Keep the shuffle visible long enough to read as intentional.
+            let wait = 0.6 - Date.now.timeIntervalSince(started)
+            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            openers = next.openers
+            aiOpeners = next.ai
+            shuffling = false
+        }
+    }
+
     private func consumeWriteRequest() {
         guard router.writeRequest != router.handledWriteRequest else { return }
         router.handledWriteRequest = router.writeRequest
@@ -196,7 +216,7 @@ struct TodayView: View {
                                          : "Recording audio only. Transcription isn't available here."
         }
         if noTranscript && take != nil { return "No transcript this time. Your recording is kept." }
-        return "Sealed for 14 days once you let it go."
+        return "Sealed for \(Entry.sealDays) days once you let it go."
     }
 
     private func startRecording() {
