@@ -1,4 +1,4 @@
-import { TASKS, validTexts, buildMessages } from "./prompts.js";
+import { DEFAULT_MODEL, TASKS, validTexts, validProfile, validTurns, buildMessages } from "./prompts.js";
 
 // Stateless: nothing is logged, stored, or cached. The request body only lives
 // for the length of this function call.
@@ -11,7 +11,7 @@ const json = (data, status = 200) =>
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const match = url.pathname.match(/^\/v1\/(reflect|openers)$/);
+    const match = url.pathname.match(/^\/v1\/(reflect|openers|chat|nudge)$/);
     if (!match) return json({ error: "not_found" }, 404);
     if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
@@ -32,14 +32,21 @@ export default {
       return json({ error: "bad_json" }, 400);
     }
     const texts = validTexts(body);
-    if (!texts) return json({ error: "bad_request" }, 400);
+    const profile = validProfile(body);
+    if (!texts || profile === null) return json({ error: "bad_request" }, 400);
+
+    let turns = null;
+    if (match[1] === "chat") {
+      turns = validTurns(body);
+      if (!turns) return json({ error: "bad_request" }, 400);
+    }
 
     const task = TASKS[match[1]];
     try {
-      const result = await env.AI.run(env.MODEL || "@cf/meta/llama-3.1-8b-instruct-fp8-fast", {
-        messages: buildMessages(task, texts),
+      const result = await env.AI.run(env.MODEL || DEFAULT_MODEL, {
+        messages: buildMessages(task, texts, { profile, turns }),
         max_tokens: task.maxTokens,
-        temperature: 0.7,
+        temperature: task.temperature,
       });
       const text = (result && (result.response ?? result.choices?.[0]?.message?.content)) || "";
       if (!text.trim()) return json({ error: "empty" }, 502);

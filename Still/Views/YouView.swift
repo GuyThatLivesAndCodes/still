@@ -14,6 +14,17 @@ struct YouView: View {
     @AppStorage("replayIntro") private var replayIntro = false
     @State private var remindersDenied = false
     @State private var showAI = false
+    @State private var showProfile = false
+    @State private var showQuestions = false
+    @AppStorage(QuestionPrefs.categoriesKey) private var questionCategories = ""
+    @AppStorage(QuestionPrefs.mixKey) private var questionMix = AIMix.mild.rawValue
+    @AppStorage(Profile.nameKey) private var profileName = ""
+    @AppStorage(Profile.birthdayKey) private var profileBirthday: Double = 0
+    @AppStorage(Profile.genderKey) private var profileGender = Gender.unset.rawValue
+    @AppStorage(NudgeWriter.enabledKey) private var aiNudges = true
+    @AppStorage(Notifier.repliesKey) private var notifyReplies = true
+    @AppStorage(Notifier.unlocksKey) private var notifyUnlocks = true
+    @Environment(\.modelContext) private var context
     // Observed so the Quiet AI row updates when the sheet changes them.
     @AppStorage(AIService.modeKey) private var aiMode = AIMode.automatic.rawValue
     @AppStorage(AIService.consentKey) private var aiCloudConsent = false
@@ -28,29 +39,109 @@ struct YouView: View {
 
                 tokens
 
-                section("Reminders") {
-                    VStack(alignment: .leading, spacing: 12) {
+                section("About you") {
+                    Button { showProfile = true } label: {
+                        HStack(spacing: 14) {
+                            ZStack {
+                                Circle().fill(Theme.accent.opacity(0.18))
+                                Text(initial)
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(Theme.accent)
+                            }
+                            .frame(width: 42, height: 42)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(profileName.isEmpty ? "Add your name" : profileName)
+                                    .font(.body.weight(.medium)).foregroundStyle(Theme.ink)
+                                Text(profileLine).font(.footnote).foregroundStyle(Theme.tertiary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.tertiary)
+                        }
+                        .padding(14)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                section("Notifications") {
+                    VStack(spacing: 0) {
                         Toggle(isOn: Binding(get: { remindersEnabled }, set: setReminders)) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Gentle nudges").font(.body.weight(.medium))
+                                Text("Daily reminder").font(.body.weight(.medium))
                                 Text(habitLine).font(.footnote).foregroundStyle(Theme.tertiary)
+                                if remindersEnabled {
+                                    Text("Plus a nudge later if you haven't written, and one an hour before your streak ends.")
+                                        .font(.caption).foregroundStyle(Theme.tertiary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
                         .tint(Theme.accent)
+                        .padding(16)
+                        if remindersEnabled && AIService.isActive {
+                            Divider().overlay(Theme.hairline).padding(.leading, 16)
+                            Toggle(isOn: $aiNudges) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Written by Quiet AI").font(.body.weight(.medium))
+                                    Text("A fresh line each day, never about anything sensitive")
+                                        .font(.footnote).foregroundStyle(Theme.tertiary)
+                                }
+                            }
+                            .tint(Theme.accent)
+                            .padding(16)
+                        }
+                        if ReflectionQueue.isEnabled {
+                            Divider().overlay(Theme.hairline).padding(.leading, 16)
+                            Toggle(isOn: Binding(get: { notifyReplies }, set: { setNotify(replies: $0) })) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Notes and replies").font(.body.weight(.medium))
+                                    Text("When a note or chat reply arrives").font(.footnote).foregroundStyle(Theme.tertiary)
+                                }
+                            }
+                            .tint(Theme.accent)
+                            .padding(16)
+                        }
+                        Divider().overlay(Theme.hairline).padding(.leading, 16)
+                        Toggle(isOn: Binding(get: { notifyUnlocks }, set: { setNotify(unlocks: $0) })) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Unlocked entries").font(.body.weight(.medium))
+                                Text("Around midday on the day they open").font(.footnote).foregroundStyle(Theme.tertiary)
+                            }
+                        }
+                        .tint(Theme.accent)
+                        .padding(16)
                         if remindersDenied {
                             Text("Notifications are off for still. in Settings.")
                                 .font(.footnote)
                                 .foregroundStyle(Theme.secondary)
+                                .padding([.horizontal, .bottom], 16)
                         }
                     }
-                    .padding(16)
+                    .animation(.snappy, value: remindersEnabled)
+                }
+
+                section("Questions") {
+                    Button { showQuestions = true } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Prompts above Write").font(.body.weight(.medium)).foregroundStyle(Theme.ink)
+                                Text(questionsLine).font(.footnote).foregroundStyle(Theme.tertiary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.tertiary)
+                        }
+                        .padding(16)
+                        .frame(minHeight: 52)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 section("Quiet AI") {
                     Button { showAI = true } label: {
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Notes and openers").font(.body.weight(.medium)).foregroundStyle(Theme.ink)
+                                Text("Notes, chats and openers").font(.body.weight(.medium)).foregroundStyle(Theme.ink)
                                 Text(aiLine).font(.footnote).foregroundStyle(Theme.tertiary)
                             }
                             Spacer()
@@ -92,7 +183,7 @@ struct YouView: View {
                     }
                 }
 
-                Text("still. 0.2 · Write it, seal it, and let it go.")
+                Text("still. 0.3 · Write it, seal it, and let it go.")
                     .font(.footnote)
                     .foregroundStyle(Theme.tertiary)
                     .frame(maxWidth: .infinity)
@@ -105,6 +196,11 @@ struct YouView: View {
         .scrollIndicators(.hidden)
         .sheet(isPresented: $showPrivacy) { PrivacySheet() }
         .sheet(isPresented: $showAI) { AISettingsView() }
+        .sheet(isPresented: $showProfile) { ProfileView() }
+        .sheet(isPresented: $showQuestions) { QuestionsSettingsView() }
+        .onChange(of: aiNudges) { _, _ in
+            ReminderService.reschedule(entryDates: entries.map(\.createdAt), streak: streak, enabled: remindersEnabled)
+        }
         .sheet(isPresented: $showTerms) { LegalSheet(title: "Terms of Use", sections: LegalText.terms) }
         .sheet(isPresented: $showPolicy) { LegalSheet(title: "Privacy Policy", sections: LegalText.privacy) }
     }
@@ -113,22 +209,61 @@ struct YouView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Early reveals").font(.body.weight(.semibold)).foregroundStyle(Theme.ink)
-                Text("\(TokenWallet.weeklyFree) free each week · resets \(Fmt.shortDate(wallet.nextReset))")
+                Text(wallet.bonus > 0
+                     ? "\(TokenWallet.weeklyFree) free each week · \(wallet.bonus) refunded"
+                     : "\(TokenWallet.weeklyFree) free each week · resets \(Fmt.shortDate(wallet.nextReset))")
                     .font(.footnote).foregroundStyle(Theme.secondary)
+                Text("Spent tokens come back when the entry opens.")
+                    .font(.caption).foregroundStyle(Theme.tertiary)
             }
             Spacer()
             HStack(spacing: 6) {
-                ForEach(0..<TokenWallet.weeklyFree, id: \.self) { i in
+                ForEach(0..<max(TokenWallet.weeklyFree, wallet.available()), id: \.self) { i in
                     Circle()
                         .fill(i < wallet.available() ? Theme.accent : Color.white.opacity(0.15))
                         .frame(width: 14, height: 14)
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(wallet.available()) of \(TokenWallet.weeklyFree) left")
+            .accessibilityLabel("\(wallet.available()) early reveals left")
         }
         .padding(18)
         .glass(22)
+    }
+
+    private var questionsLine: String {
+        let cats = QuestionPrefs.decode(questionCategories)
+        let kinds = cats.count == OpenerCategory.allCases.count ? "All kinds"
+            : OpenerCategory.allCases.filter(cats.contains).map(\.title).joined(separator: ", ")
+        return "\(kinds) · \((AIMix(rawValue: questionMix) ?? .mild).title)"
+    }
+
+    private var initial: String {
+        profileName.first.map { String($0).uppercased() } ?? "?"
+    }
+
+    private var profileLine: String {
+        _ = (profileBirthday, profileGender)
+        var parts: [String] = []
+        if let age = Profile.age { parts.append("\(age)") }
+        let g = Gender(rawValue: profileGender) ?? .unset
+        if g != .unset && g != .preferNot { parts.append(g == .other ? (Profile.genderOther.isEmpty ? "Other" : Profile.genderOther) : g.title) }
+        return parts.isEmpty ? "Helps Quiet AI fit its words to you" : parts.joined(separator: " · ")
+    }
+
+    private func setNotify(replies: Bool? = nil, unlocks: Bool? = nil) {
+        if let replies { notifyReplies = replies }
+        if let unlocks { notifyUnlocks = unlocks }
+        if replies == false {
+            Notifier.cancel([Notifier.noteID])
+        }
+        VaultCare.scheduleUnlocks(entries)
+        if replies == true || unlocks == true {
+            Task {
+                let granted = await ReminderService.requestAuthorization()
+                await MainActor.run { remindersDenied = !granted }
+            }
+        }
     }
 
     private var habitLine: String {
@@ -153,7 +288,7 @@ struct YouView: View {
 
     private var exportText: String {
         readyEntries.reversed().map { e in
-            "\(e.createdAt.formatted(date: .complete, time: .shortened))\n\n\(e.plainText())"
+            "\(e.createdAt.formatted(date: .complete, time: .shortened))\n\n\(e.promptText().map { "“\($0)”\n\n" } ?? "")\(e.plainText())"
         }.joined(separator: "\n\n———\n\n")
     }
 

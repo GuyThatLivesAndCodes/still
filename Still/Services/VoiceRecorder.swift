@@ -3,9 +3,14 @@ import AVFoundation
 import Speech
 import Observation
 
-/// Records a voice entry with Apple's voice processing (noise suppression and echo
-/// cancellation) and transcribes it live, on device only. Audio is written to a
-/// protected temp file until the entry is sealed, then encrypted into the entry.
+/// Records a voice entry and transcribes it live, on device only.
+///
+/// Voice processing (`setVoiceProcessingEnabled`) is deliberately not used: on
+/// current iPhones it reports a 5-channel input format, the 5→1 converter failed
+/// on every buffer, and nothing was written or transcribed. Instead the first
+/// microphone channel is copied out directly, which works for any input layout.
+/// Audio is written to a protected temp file until the entry is sealed, then
+/// encrypted into the entry.
 @Observable
 final class VoiceRecorder {
     enum State: Equatable { case idle, recording, finishing }
@@ -34,7 +39,6 @@ final class VoiceRecorder {
 
     @ObservationIgnored private var engine: AVAudioEngine?
     @ObservationIgnored private var file: AVAudioFile?
-    @ObservationIgnored private var converter: AVAudioConverter?
     @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
     @ObservationIgnored private var task: SFSpeechRecognitionTask?
     @ObservationIgnored private var timer: Timer?
@@ -59,17 +63,18 @@ final class VoiceRecorder {
     func start(transcribe: Bool) throws {
         guard state == .idle else { return }
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default,
-                                options: [.defaultToSpeaker, .allowBluetooth])
-        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        do {
+            try session.setCategory(.playAndRecord, mode: .default,
+                                    options: [.defaultToSpeaker, .allowBluetooth])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch { throw RecorderError.engine }
+        guard session.isInputAvailable else { throw RecorderError.engine }
 
         let engine = AVAudioEngine()
         let input = engine.inputNode
-        // Apple's voice processing: isolates speech from background noise and echo.
-        try? input.setVoiceProcessingEnabled(true)
 
         let inFormat = input.outputFormat(forBus: 0)
-        guard inFormat.sampleRate > 0,
+        guard inFormat.sampleRate > 0, inFormat.channelCount > 0,
               let mono = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: inFormat.sampleRate,
                                        channels: 1, interleaved: false)
         else { throw RecorderError.engine }
@@ -82,11 +87,13 @@ final class VoiceRecorder {
             AVNumberOfChannelsKey: 1,
             AVEncoderBitRateKey: 64_000
         ]
-        let file = try AVAudioFile(forWriting: url, settings: settings,
+        let file: AVAudioFile
+        do {
+            file = try AVAudioFile(forWriting: url, settings: settings,
                                    commonFormat: .pcmFormatFloat32, interleaved: false)
+        } catch { throw RecorderError.engine }
         try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete],
                                                ofItemAtPath: url.path)
-        converter = inFormat == mono ? nil : AVAudioConverter(from: inFormat, to: mono)
 
         transcribing = false
         if transcribe, let recognizer = SFSpeechRecognizer(locale: .current) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US")),
@@ -101,12 +108,15 @@ final class VoiceRecorder {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     if let result { self.transcript = result.bestTranscription.formattedString }
+                    // Speech can fail on its own (e.g. Dictation off); keep recording audio.
+                    if error != nil && self.state == .recording { self.transcribing = false }
                     if error != nil || result?.isFinal == true { self.completeFinish() }
                 }
             }
         }
 
-        input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
+        // nil format = the input's native format, so the tap never mismatches the hardware.
+        input.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, _ in
             self?.handle(buffer, mono: mono)
         }
 
@@ -117,7 +127,7 @@ final class VoiceRecorder {
         elapsed = 0
         levels = Array(repeating: 0, count: levels.count)
 
-        _ = engine.mainMixerNode   // voice processing needs a complete I/O graph
+        _ = engine.mainMixerNode
         engine.prepare()
         do { try engine.start() } catch { teardown(); throw RecorderError.engine }
 
@@ -130,22 +140,22 @@ final class VoiceRecorder {
         }
     }
 
+    /// Copies the first microphone channel into a mono buffer (works for 1, 2 or 5+ channels).
+    private static func firstChannel(of buffer: AVAudioPCMBuffer, as mono: AVAudioFormat) -> AVAudioPCMBuffer? {
+        let frames = buffer.frameLength
+        guard frames > 0, buffer.format.sampleRate == mono.sampleRate,
+              let src = buffer.floatChannelData,
+              let out = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: frames),
+              let dst = out.floatChannelData?[0] else { return nil }
+        let stride = buffer.format.isInterleaved ? Int(buffer.format.channelCount) : 1
+        let channel = src[0]
+        for i in 0..<Int(frames) { dst[i] = channel[i * stride] }
+        out.frameLength = frames
+        return out
+    }
+
     private func handle(_ buffer: AVAudioPCMBuffer, mono: AVAudioFormat) {
-        var out = buffer
-        if let converter {
-            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * mono.sampleRate / buffer.format.sampleRate) + 32
-            guard let converted = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: capacity) else { return }
-            var fed = false
-            var err: NSError?
-            converter.convert(to: converted, error: &err) { _, status in
-                if fed { status.pointee = .noDataNow; return nil }
-                fed = true
-                status.pointee = .haveData
-                return buffer
-            }
-            if err != nil { return }
-            out = converted
-        }
+        guard let out = Self.firstChannel(of: buffer, as: mono) else { return }
         try? file?.write(from: out)
         request?.append(out)
 
@@ -220,7 +230,6 @@ final class VoiceRecorder {
 
     private func teardownEngine() {
         engine = nil
-        converter = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }

@@ -10,16 +10,20 @@ enum EntryWriter {
     @discardableResult
     static func seal(_ text: String, source: EntrySource, createdAt: Date = .now,
                      audio: Data? = nil, audioDuration: TimeInterval = 0,
+                     prompt: String? = nil,
                      context: ModelContext, streak: StreakStore) throws -> Entry {
         let entry = Entry(cipher: try EntryCipher.seal(text), source: source, createdAt: createdAt)
         if let audio {
             entry.audioCipher = try EntryCipher.seal(data: audio)
             entry.audioDuration = audioDuration
         }
+        if let prompt, !prompt.isEmpty {
+            entry.promptCipher = try EntryCipher.seal(prompt)
+        }
         context.insert(entry)
         try context.save()
         streak.recordEntry(at: createdAt)
-        ReflectionQueue.enqueue(entry.id)
+        ReflectionQueue.enqueue(entry.id, context: context)
         syncSurroundings(context: context, streak: streak)
         return entry
     }
@@ -32,9 +36,14 @@ enum EntryWriter {
         let defaults = UserDefaults.standard
         ReminderService.reschedule(entryDates: dates, streak: streak,
                                    enabled: defaults.bool(forKey: "remindersEnabled"))
+        VaultCare.run(context: context)
+        NudgeWriter.refreshIfStale(context: context) {
+            ReminderService.reschedule(entryDates: dates, streak: streak,
+                                       enabled: UserDefaults.standard.bool(forKey: "remindersEnabled"))
+        }
         let visible = defaults.object(forKey: "streakVisible") as? Bool ?? true
         let snapshot = WidgetSnapshot(days: streak.days, deadline: streak.deadline,
-                                      paused: streak.isPaused, streakVisible: visible,
+                                      streakVisible: visible,
                                       lastEntry: dates.first)
         WidgetShared.write(snapshot)
         WidgetCenter.shared.reloadAllTimelines()
@@ -48,11 +57,30 @@ enum EntryWriter {
 final class AppRouter {
     static let shared = AppRouter()
     var writeRequest = 0
+    /// Last request Today acted on. Lives here, not in the view, so switching
+    /// back to Today doesn't replay an old widget tap and focus the text box.
+    var handledWriteRequest = 0
+
+    /// Set by a tapped notification; RootView switches tabs, Notes opens the note.
+    var tabRequest: AppTab?
+    var noteRequest: UUID?
 
     func requestWrite() { writeRequest += 1 }
 
     func handle(_ url: URL) {
         if url.scheme == "still", url.host == "write" { requestWrite() }
+    }
+
+    /// Routes from notifications: "vault", "notes", or "note:<uuid>".
+    func open(route: String) {
+        if route == "vault" {
+            tabRequest = .vault
+        } else if route.hasPrefix("note:") {
+            noteRequest = UUID(uuidString: String(route.dropFirst(5)))
+            tabRequest = .notes
+        } else if route == "notes" {
+            tabRequest = .notes
+        }
     }
 }
 

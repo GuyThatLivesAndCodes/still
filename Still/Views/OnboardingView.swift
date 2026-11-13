@@ -6,7 +6,7 @@ struct OnboardingView: View {
     var onFinish: () -> Void
 
     private enum Step: Int, CaseIterable {
-        case welcome, write, seal, reveal, streak, privacy, everywhere, terms
+        case welcome, write, seal, reveal, streak, privacy, everywhere, about, terms
     }
 
     @State private var step: Step = .welcome
@@ -93,6 +93,7 @@ struct OnboardingView: View {
         case .streak: StreakDemoPage()
         case .privacy: PrivacyIntroPage()
         case .everywhere: EverywherePage()
+        case .about: AboutYouPage()
         case .terms: TermsPage(onAccept: onFinish)
         }
     }
@@ -200,7 +201,7 @@ private struct WriteDemoPage: View {
                     if sealed {
                         HStack(spacing: 10) {
                             Image(systemName: "lock.fill")
-                            Text("Sealed until midnight, 14 days from now")
+                            Text("Sealed until midnight, \(Entry.sealDays) days from now")
                                 .font(.subheadline.weight(.medium))
                         }
                         .foregroundStyle(Theme.ink)
@@ -261,17 +262,17 @@ private struct WriteDemoPage: View {
 
 private struct SealDemoPage: View {
     @State private var day = 0
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 5)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: Entry.sealDays + 1)
 
     var body: some View {
         PageLayout(eyebrow: "Step two",
                    title: "Seal it.",
-                   detail: "Once sealed, an entry can't be changed. It rests out of reach and opens at midnight on the 14th day, so you can put it down and move on.") {
+                   detail: "Once sealed, an entry can't be changed. It rests out of reach and opens at midnight on the \(Entry.sealDays)th day, so you can put it down and move on.") {
             VStack(spacing: 16) {
                 Spacer()
                 LazyVGrid(columns: columns, spacing: 6) {
-                    ForEach(0...14, id: \.self) { i in
-                        let isOpen = i == 14
+                    ForEach(0...Entry.sealDays, id: \.self) { i in
+                        let isOpen = i == Entry.sealDays
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(i <= day ? (isOpen ? Theme.accent : Color.white.opacity(0.16)) : Color.white.opacity(0.05))
                             .overlay {
@@ -287,11 +288,11 @@ private struct SealDemoPage: View {
                                         .foregroundStyle(Theme.tertiary)
                                 }
                             }
-                            .frame(height: 40)
+                            .frame(height: 52)
                     }
                 }
                 .frame(maxWidth: 300)
-                Text(day >= 14 ? "Day 14 · 12:00 AM" : "Day \(day)")
+                Text(day >= Entry.sealDays ? "Day \(Entry.sealDays) · 12:00 AM" : "Day \(day)")
                     .font(.footnote.weight(.medium))
                     .monospacedDigit()
                     .foregroundStyle(Theme.secondary)
@@ -299,13 +300,13 @@ private struct SealDemoPage: View {
                 Spacer()
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("An entry sealed today opens at midnight on day 14.")
+            .accessibilityLabel("An entry sealed today opens at midnight on day \(Entry.sealDays).")
         }
         .task {
             day = 0
             try? await Task.sleep(for: .milliseconds(400))
-            for d in 1...14 {
-                try? await Task.sleep(for: .milliseconds(110))
+            for d in 1...Entry.sealDays {
+                try? await Task.sleep(for: .milliseconds(320))
                 withAnimation(.easeOut(duration: 0.2)) { day = d }
             }
         }
@@ -382,7 +383,7 @@ private struct StreakDemoPage: View {
     var body: some View {
         PageLayout(eyebrow: "If you like",
                    title: "Gentle, never guilty.",
-                   detail: "Write once every 36 hours to keep a streak. You get 2 free revives a year, you can pause anytime for free, or hide the streak completely.") {
+                   detail: "Write once every 36 hours to keep a streak. You get 2 free revives a year, and you can hide the streak completely.") {
             VStack(spacing: 22) {
                 Spacer()
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -500,6 +501,136 @@ private struct EverywherePage: View {
                 Spacer()
             }
         }
+    }
+}
+
+private struct AboutYouPage: View {
+    @AppStorage(Profile.nameKey) private var name = ""
+    @AppStorage(Profile.birthdayKey) private var birthday: Double = 0
+    @AppStorage(Profile.genderKey) private var genderRaw = Gender.unset.rawValue
+    @AppStorage(Profile.genderOtherKey) private var genderOther = ""
+    @FocusState private var field: Field?
+
+    private enum Field { case name, other }
+    private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Optional")
+                        .font(.caption.weight(.semibold))
+                        .kerning(0.8)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Theme.accent)
+                    Text("A little about you.")
+                        .font(.system(size: 34, weight: .semibold))
+                        .kerning(-1.2)
+                        .foregroundStyle(Theme.ink)
+                    Text("Quiet AI uses this to word its notes and replies for you. It stays on this iPhone, and you can change it in You anytime.")
+                        .font(.system(size: 17))
+                        .lineSpacing(3)
+                        .foregroundStyle(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 24)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("What should still. call you?").sectionLabel()
+                    TextField("First name", text: $name)
+                        .focused($field, equals: .name)
+                        .textContentType(.givenName)
+                        .submitLabel(.done)
+                        .font(.system(size: 17))
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 16)
+                        .frame(height: 52)
+                        .glass(16)
+                        .onChange(of: name) { _, v in if v.count > 40 { name = String(v.prefix(40)) } }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Date of birth").sectionLabel()
+                    HStack {
+                        if birthday == 0 {
+                            Button {
+                                field = nil
+                                birthday = ProfileDefaults.suggestedBirthday.timeIntervalSince1970
+                            } label: {
+                                Label("Add birthday", systemImage: "plus")
+                                    .font(.system(size: 17))
+                                    .foregroundStyle(Theme.accent)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            DatePicker("Birthday", selection: birthdayBinding, in: ProfileDefaults.birthdayRange,
+                                       displayedComponents: .date)
+                                .foregroundStyle(Theme.ink)
+                                .tint(Theme.accent)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 52)
+                    .glass(16)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Gender").sectionLabel()
+                    LazyVGrid(columns: columns, spacing: 8) {
+                        ForEach(Gender.choices) { option in
+                            let selected = genderRaw == option.rawValue
+                            Button {
+                                withAnimation(.snappy) {
+                                    genderRaw = selected ? Gender.unset.rawValue : option.rawValue
+                                }
+                                if option == .other && !selected { field = .other } else { field = nil }
+                            } label: {
+                                Text(option.title)
+                                    .font(.system(size: 15, weight: selected ? .semibold : .regular))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                    .foregroundStyle(selected ? Color.black : Theme.ink)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 46)
+                                    .background(selected ? Theme.ink : Color.white.opacity(0.06),
+                                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(Theme.hairline, lineWidth: selected ? 0 : 1))
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PressScaleStyle())
+                            .accessibilityAddTraits(selected ? .isSelected : [])
+                        }
+                    }
+                    if genderRaw == Gender.other.rawValue {
+                        TextField("How you describe it", text: $genderOther)
+                            .focused($field, equals: .other)
+                            .submitLabel(.done)
+                            .font(.system(size: 17))
+                            .foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 16)
+                            .frame(height: 52)
+                            .glass(16)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .onChange(of: genderOther) { _, v in
+                                if v.count > 30 { genderOther = String(v.prefix(30)) }
+                            }
+                    }
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .onDisappear { field = nil }
+    }
+
+    private var birthdayBinding: Binding<Date> {
+        Binding(get: { Date(timeIntervalSince1970: birthday) },
+                set: { birthday = $0.timeIntervalSince1970 })
     }
 }
 

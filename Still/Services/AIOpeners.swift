@@ -11,6 +11,7 @@ struct AIOpeners: OpenerProvider {
     private static let cacheKey = "ai.openers.cipher"
     private static let dateKey = "ai.openers.date"
     private static let countKey = "ai.openers.entryCount"
+    private static let styleKey = "ai.openers.style"
     private static let minEntries = 3
     private static let maxAge: TimeInterval = 12 * 3600
 
@@ -24,6 +25,11 @@ struct AIOpeners: OpenerProvider {
         return cached
     }
 
+    func freshOpeners() async -> [String] {
+        guard AIService.isActive else { return [] }
+        return await Self.refresh(container: container, force: true) ?? []
+    }
+
     private static func cached() -> [String] {
         guard let data = UserDefaults.standard.data(forKey: cacheKey),
               let text = try? EntryCipher.open(data) else { return [] }
@@ -32,30 +38,45 @@ struct AIOpeners: OpenerProvider {
 
     @MainActor
     private static func refreshIfStale(container: ModelContainer) async {
-        guard !refreshing, AIService.isActive else { return }
+        _ = await refresh(container: container, force: false)
+    }
+
+    /// Returns the new set when one was written.
+    @MainActor
+    private static func refresh(container: ModelContainer, force: Bool) async -> [String]? {
+        guard !refreshing, AIService.isActive else { return nil }
         let context = ModelContext(container)
         var latest = FetchDescriptor<Entry>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         latest.fetchLimit = 6
         let entries = (try? context.fetch(latest)) ?? []
         let total = (try? context.fetchCount(FetchDescriptor<Entry>())) ?? 0
-        guard total >= minEntries else { return }
+        guard total >= minEntries else { return nil }
 
         let defaults = UserDefaults.standard
         let age = (defaults.object(forKey: dateKey) as? Date).map { Date.now.timeIntervalSince($0) } ?? .infinity
-        guard age > maxAge || defaults.integer(forKey: countKey) != total else { return }
+        let style = QuestionPrefs.signature
+        guard force || age > maxAge || defaults.integer(forKey: countKey) != total
+                || (defaults.string(forKey: styleKey) ?? "") != style else { return nil }
 
         var notes = FetchDescriptor<Note>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         notes.fetchLimit = 3
-        let texts = entries.reversed().map { $0.plainText() }
+        var chats = FetchDescriptor<ChatMessage>(predicate: #Predicate<ChatMessage> { !$0.fromAI },
+                                                 sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
+        chats.fetchLimit = 3
+        let texts = entries.reversed().map { $0.contextText() }
             + ((try? context.fetch(notes)) ?? []).reversed().map { $0.plainText() }
+            + ((try? context.fetch(chats)) ?? []).reversed().map { $0.plainText() }
+            + (QuestionPrefs.aiHint.map { [$0] } ?? [])
 
         refreshing = true
         defer { refreshing = false }
-        guard let reply = try? await AIService.run(.openers(texts)) else { return }
+        guard let reply = try? await AIService.run(.openers(texts)) else { return nil }
         let openers = AIService.parseOpeners(reply)
-        guard !openers.isEmpty, let sealed = try? EntryCipher.seal(openers.joined(separator: "\n")) else { return }
+        guard !openers.isEmpty, let sealed = try? EntryCipher.seal(openers.joined(separator: "\n")) else { return nil }
         defaults.set(sealed, forKey: cacheKey)
         defaults.set(Date.now, forKey: dateKey)
         defaults.set(total, forKey: countKey)
+        defaults.set(style, forKey: styleKey)
+        return openers
     }
 }

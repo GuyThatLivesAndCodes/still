@@ -284,7 +284,6 @@ struct StreakWidgetView: View {
 
     private var statusLine: String {
         if !snap.streakVisible { return "Tap to write" }
-        if snap.paused { return "Paused" }
         if running { return snap.days == 1 ? "day of showing up" : "days of showing up" }
         return "Tap to start a streak"
     }

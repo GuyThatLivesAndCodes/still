@@ -8,6 +8,8 @@ enum Theme {
     static let card = Color(white: 0.06)
     static let hairline = Color.white.opacity(0.09)
     static let accent = Color(red: 0.667, green: 0.706, blue: 0.941)
+    /// Anything Quiet AI wrote is purple; preset text stays gray.
+    static let ai = Color(red: 0.76, green: 0.62, blue: 1.0)
 }
 
 extension View {
@@ -59,7 +61,9 @@ struct SecondaryButtonStyle: ButtonStyle {
             .frame(height: 54)
             .foregroundStyle(Theme.ink)
             .glass(27)
-            .opacity(configuration.isPressed ? 0.7 : 1)
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -79,6 +83,29 @@ enum Fmt {
         if cal.isDateInYesterday(date) { return "Yesterday · \(period(date))" }
         let day = date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         return "\(day) · \(period(date))"
+    }
+
+    static func time(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
+    /// "Tue, Nov 3 · 9:41 PM", with the year when it isn't this year.
+    static func exact(_ date: Date) -> String {
+        let sameYear = Calendar.current.isDate(date, equalTo: .now, toGranularity: .year)
+        let day = sameYear
+            ? date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            : date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().year())
+        return "\(day) · \(time(date))"
+    }
+
+    /// "Opens in 3 days", then hours, minutes, and finally seconds.
+    static func opensIn(_ t: TimeInterval) -> String {
+        let s = max(0, Int(t.rounded(.up)))
+        func unit(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
+        if s >= 86400 { return "Opens in " + unit(s / 86400, "day") }
+        if s >= 3600 { return "Opens in " + unit(s / 3600, "hour") }
+        if s >= 60 { return "Opens in " + unit(s / 60, "minute") }
+        return "Opens in " + unit(s, "second")
     }
 
     static func shortDate(_ date: Date) -> String {

@@ -3,8 +3,7 @@ import SwiftUI
 struct StreakView: View {
     @Environment(StreakStore.self) private var streak
     @AppStorage("streakVisible") private var visible = true
-    @State private var askPause = false
-    @State private var askResume = false
+    @State private var revived = 0
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
@@ -16,9 +15,9 @@ struct StreakView: View {
                         .foregroundStyle(Theme.ink)
 
                     hero(now: ctx.date)
-                    controls(now: ctx.date)
+                    controls
 
-                    Text("While paused, you can keep writing as usual. Entries won't count toward the streak, and reminders won't ask you to resume.")
+                    Text("Life happens. You have a full 36 hours between entries, and two revives a year if a window slips by.")
                         .font(.footnote)
                         .foregroundStyle(Theme.tertiary)
                         .padding(.horizontal, 6)
@@ -39,21 +38,8 @@ struct StreakView: View {
                 .padding(.bottom, 40)
             }
             .scrollIndicators(.hidden)
-            .onChange(of: Int(ctx.date.timeIntervalSince1970) / 30) { _, _ in streak.refresh() }
         }
-        .onAppear { streak.refresh() }
-        .confirmationDialog("Pause your streak?", isPresented: $askPause, titleVisibility: .visible) {
-            Button("Pause in 6 hours") { streak.requestPause() }
-            Button("Not now", role: .cancel) {}
-        } message: {
-            Text("The pause takes effect after 6 hours, so you can change your mind. Pausing is unlimited and always free.")
-        }
-        .confirmationDialog("Resume your streak?", isPresented: $askResume, titleVisibility: .visible) {
-            Button("Resume in 6 hours") { streak.requestResume() }
-            Button("Not now", role: .cancel) {}
-        } message: {
-            Text("After 6 hours a fresh 36-hour window begins.")
-        }
+        .sensoryFeedback(.success, trigger: revived)
     }
 
     private func hero(now: Date) -> some View {
@@ -62,24 +48,24 @@ struct StreakView: View {
                 Text("\(streak.days)")
                     .font(.system(size: 72, weight: .semibold))
                     .kerning(-3)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
                     .foregroundStyle(Theme.ink)
                 Text(streak.days == 1 ? "day of showing up" : "days of showing up")
                     .font(.body)
                     .foregroundStyle(Theme.secondary)
             }
 
-            if streak.isPaused {
-                Label("Paused", systemImage: "pause.circle")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Theme.secondary)
-            } else if streak.isExpired(at: now) {
+            if streak.isExpired(at: now) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("This streak ended. Writing again starts a new one.")
                         .font(.subheadline)
                         .foregroundStyle(Theme.secondary)
                     if streak.revivesLeft > 0 {
-                        Button("Use a revive (\(streak.revivesLeft) left)") { streak.revive() }
-                            .buttonStyle(SecondaryButtonStyle())
+                        Button("Use a revive (\(streak.revivesLeft) left)") {
+                            withAnimation(.snappy) { if streak.revive() { revived += 1 } }
+                        }
+                        .buttonStyle(SecondaryButtonStyle())
                     }
                 }
             } else if let left = streak.remaining(at: now) {
@@ -90,8 +76,9 @@ struct StreakView: View {
                         Text(Fmt.hm(left)).font(.subheadline.weight(.semibold)).monospacedDigit()
                     }
                     .foregroundStyle(Theme.ink)
-                    ProgressView(value: left / StreakStore.window)
+                    ProgressView(value: min(max(left / StreakStore.window, 0), 1))
                         .tint(Theme.accent)
+                        .animation(.linear(duration: 1), value: left)
                     Text("Each entry opens a fresh 36-hour window.")
                         .font(.footnote)
                         .foregroundStyle(Theme.tertiary)
@@ -103,10 +90,12 @@ struct StreakView: View {
             }
         }
         .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .glass(26)
+        .animation(.snappy, value: streak.isExpired(at: now))
     }
 
-    private func controls(now: Date) -> some View {
+    private var controls: some View {
         VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -126,53 +115,8 @@ struct StreakView: View {
             }
             .foregroundStyle(Theme.ink)
             .padding(16)
-
-            Divider().overlay(Theme.hairline).padding(.horizontal, 16)
-
-            pauseRow(now: now)
-                .padding(16)
         }
         .card(22)
-    }
-
-    @ViewBuilder
-    private func pauseRow(now: Date) -> some View {
-        if let at = streak.pauseEffectiveAt {
-            pendingRow(title: "Pausing in \(Fmt.hm(at.timeIntervalSince(now)))") { streak.cancelPauseRequest() }
-        } else if let at = streak.resumeEffectiveAt {
-            pendingRow(title: "Resuming in \(Fmt.hm(at.timeIntervalSince(now)))") { streak.cancelResumeRequest() }
-        } else if streak.isPaused {
-            actionRow(title: "Resume streak", subtitle: "Takes effect after 6 hours.") { askResume = true }
-        } else {
-            actionRow(title: "Pause streak", subtitle: "Takes effect after 6 hours. Unlimited, always free.") { askPause = true }
-                .disabled(!streak.isActive(at: now))
-                .opacity(streak.isActive(at: now) ? 1 : 0.5)
-        }
-    }
-
-    private func actionRow(title: String, subtitle: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.body.weight(.medium)).foregroundStyle(Theme.ink)
-                    Text(subtitle).font(.footnote).foregroundStyle(Theme.tertiary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.tertiary)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func pendingRow(title: String, cancel: @escaping () -> Void) -> some View {
-        HStack {
-            Text(title).font(.body.weight(.medium)).foregroundStyle(Theme.ink).monospacedDigit()
-            Spacer()
-            Button("Cancel", action: cancel)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Theme.accent)
-                .frame(minHeight: 44)
-        }
+        .animation(.snappy, value: streak.revivesLeft)
     }
 }

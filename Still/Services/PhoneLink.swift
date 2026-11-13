@@ -23,7 +23,6 @@ final class PhoneLink: NSObject, WCSessionDelegate {
               WCSession.default.isPaired, WCSession.default.isWatchAppInstalled else { return }
         var context: [String: Any] = [
             "days": snapshot.days,
-            "paused": snapshot.paused,
             "visible": snapshot.streakVisible
         ]
         if let deadline = snapshot.deadline { context["deadline"] = deadline.timeIntervalSince1970 }
