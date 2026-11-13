@@ -9,6 +9,7 @@ struct RevealView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var endsAt = Date.now.addingTimeInterval(60)
     @State private var text = ""
+    @State private var question: String?
     @State private var window: TimeInterval = 60
     @State private var player = VoicePlayer()
 
@@ -46,13 +47,18 @@ struct RevealView: View {
                     }
 
                     ScrollView {
-                        Text(text)
-                            .font(.system(size: 18))
-                            .lineSpacing(6)
-                            .foregroundStyle(Theme.ink)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.disabled)
-                            .privacySensitive()
+                        VStack(alignment: .leading, spacing: 14) {
+                            if let question {
+                                PromptHeader(question: question)
+                            }
+                            Text(text)
+                                .font(.system(size: 18))
+                                .lineSpacing(6)
+                                .foregroundStyle(Theme.ink)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.disabled)
+                                .privacySensitive()
+                        }
                     }
                     .scrollIndicators(.hidden)
 
@@ -71,6 +77,7 @@ struct RevealView: View {
         }
         .onAppear {
             text = entry.plainText()
+            question = entry.promptText()
             if entry.hasAudio {
                 window = max(60, entry.audioDuration + 20)
                 endsAt = Date.now.addingTimeInterval(window)
@@ -214,5 +221,27 @@ struct DeleteView: View {
         } message: {
             Text("This entry will be permanently erased. This can't be undone.")
         }
+    }
+}
+
+/// The question an entry answers, shown above the answer.
+struct PromptHeader: View {
+    let question: String
+    var tint: Color = Theme.secondary
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Capsule()
+                .fill(Theme.accent)
+                .frame(width: 3)
+            Text(verbatim: question)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(tint)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Question: \(question)")
     }
 }

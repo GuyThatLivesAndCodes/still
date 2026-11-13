@@ -17,6 +17,14 @@ struct TodayView: View {
     @State private var shuffling = false
     @State private var shuffles = 0
     @State private var alertTitle = "Couldn't seal this entry"
+    /// The prompt being answered; sealed with the entry and shown above it.
+    @State private var question: String?
+    @State private var settingsAlert = false
+    @State private var cooldownUntil: Date?
+    @State private var cooldownTask: Task<Void, Never>?
+    @State private var blockedShuffles = 0
+    @AppStorage(QuestionPrefs.categoriesKey) private var categoriesRaw = ""
+    @AppStorage(QuestionPrefs.mixKey) private var mixRaw = AIMix.mild.rawValue
     @Environment(\.scenePhase) private var scenePhase
 
     // Voice entries
@@ -28,9 +36,9 @@ struct TodayView: View {
     @State private var noTranscript = false
 
     private var recording: Bool { recorder.state != .idle }
-    private var expanded: Bool { isEditing || !text.isEmpty || recording || take != nil }
+    private var expanded: Bool { isEditing || !text.isEmpty || recording || take != nil || question != nil }
     /// Openers show whenever the box isn't selected (hidden the moment it's tapped open).
-    private var showOpener: Bool { !focused && !recording && !(isEditing && text.isEmpty) }
+    private var showOpener: Bool { question == nil && !focused && !recording && !(isEditing && text.isEmpty) }
     private var canSeal: Bool {
         !recording && (take != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
@@ -49,8 +57,9 @@ struct TodayView: View {
 
                 Spacer(minLength: 24)
 
-                OpenerCarousel(openers: openers, aiOpeners: aiOpeners, active: showOpener, onTap: beginEditing,
-                               shuffling: shuffling, onShuffle: shuffleOpeners)
+                OpenerCarousel(openers: openers, aiOpeners: aiOpeners, active: showOpener, onTap: answer,
+                               shuffling: shuffling, onShuffle: shuffleOpeners,
+                               cooldownUntil: cooldownUntil)
                     .frame(height: showOpener ? 58 : 0)
                     .padding(.bottom, showOpener ? 20 : 0)
                     .opacity(showOpener ? 1 : 0)
@@ -87,12 +96,11 @@ struct TodayView: View {
         }
         .task {
             guard openers.isEmpty else { return }
-            let loaded = await OpenerFeed.load()
-            withAnimation(.easeOut(duration: 0.6)) {
-                openers = loaded.openers
-                aiOpeners = loaded.ai
-            }
+            await reloadOpeners()
         }
+        // You → Questions changed: rebuild the line with the new categories and mix.
+        .onChange(of: categoriesRaw) { _, _ in Task { await reloadOpeners() } }
+        .onChange(of: mixRaw) { _, _ in Task { await reloadOpeners() } }
         .onChange(of: recorder.transcript) { _, spoken in
             guard recording, !spoken.isEmpty else { return }
             text = textBeforeVoice.isEmpty ? spoken : textBeforeVoice + "\n\n" + spoken
@@ -111,13 +119,17 @@ struct TodayView: View {
         .sensoryFeedback(.stop, trigger: recorder.isRecording) { was, now in was && !now }
         .onChange(of: focused) { _, isFocused in
             if !isFocused && text.isEmpty && !recording && take == nil {
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { isEditing = false }
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                    isEditing = false
+                    question = nil
+                }
             }
         }
         .onChange(of: router.writeRequest) { _, _ in consumeWriteRequest() }
         .onAppear { consumeWriteRequest() }
         .sensoryFeedback(.success, trigger: sealCount)
         .sensoryFeedback(.impact(flexibility: .soft), trigger: shuffles)
+        .sensoryFeedback(.warning, trigger: blockedShuffles)
         .fullScreenCover(item: $sealedEntry) { entry in
             SealedView(entry: entry)
         }
@@ -128,10 +140,71 @@ struct TodayView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .alert("Turn on the microphone", isPresented: $settingsAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text("still. needs microphone access to record a voice entry. You can allow it in Settings.")
+        }
     }
 
     // Small glass pill until tapped; grows into a writing surface.
     private var composer: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if expanded, let question {
+                questionHeader(question)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            editorArea
+        }
+        .frame(maxWidth: expanded ? .infinity : 270)
+        // Shrinks (down to 120) on short screens when the keyboard is up, so the
+        // voice control and Seal button never get pushed under it.
+        .frame(minHeight: expanded ? 120 : 52, maxHeight: expanded ? (question != nil ? 280 : 220) : 52)
+        .glass(expanded ? 24 : 26)
+        .shadow(color: .black.opacity(expanded ? 0.5 : 0), radius: 30, y: 16)
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: expanded)
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: question)
+    }
+
+    private func questionHeader(_ q: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Capsule()
+                .fill(aiOpeners.contains(q) ? Theme.ai : Theme.accent)
+                .frame(width: 3)
+            Text(verbatim: q)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(aiOpeners.contains(q) ? Theme.ai : Theme.secondary)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { question = nil }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Theme.tertiary)
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.06), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(PressScaleStyle())
+            .disabled(recording)
+            .accessibilityLabel("Remove question")
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.leading, 18)
+        .padding(.trailing, 10)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.hairline).frame(height: 1).padding(.horizontal, 14)
+        }
+    }
+
+    private var editorArea: some View {
         ZStack(alignment: .topLeading) {
             if expanded {
                 TextEditor(text: $text)
@@ -146,6 +219,14 @@ struct TodayView: View {
                     .transition(.opacity)
                 if recording && text.isEmpty {
                     Text(recorder.transcribing ? "Listening…" : "Recording…")
+                        .font(.system(size: 17))
+                        .foregroundStyle(Theme.tertiary)
+                        .padding(.horizontal, 19)
+                        .padding(.vertical, 20)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                } else if question != nil && text.isEmpty {
+                    Text("Your answer…")
                         .font(.system(size: 17))
                         .foregroundStyle(Theme.tertiary)
                         .padding(.horizontal, 19)
@@ -169,17 +250,41 @@ struct TodayView: View {
                 .transition(.opacity)
             }
         }
-        .frame(maxWidth: expanded ? .infinity : 270)
-        // Shrinks (down to 120) on short screens when the keyboard is up, so the
-        // voice control and Seal button never get pushed under it.
-        .frame(minHeight: expanded ? 120 : 52, maxHeight: expanded ? 220 : 52)
-        .glass(expanded ? 24 : 26)
-        .shadow(color: .black.opacity(expanded ? 0.5 : 0), radius: 30, y: 16)
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: expanded)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Tapped prompt: attach it as the question this entry answers.
+    private func answer(_ prompt: String) {
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { question = prompt }
+        beginEditing()
+    }
+
+    private func reloadOpeners() async {
+        let loaded = await OpenerFeed.load()
+        withAnimation(.easeOut(duration: 0.6)) {
+            openers = loaded.openers
+            aiOpeners = loaded.ai
+        }
     }
 
     private func shuffleOpeners() {
         guard !shuffling else { return }
+        // Once per 30 seconds; a held press during the wait shows the countdown instead.
+        let wait = QuestionPrefs.shuffleWait()
+        if wait > 0 {
+            blockedShuffles += 1
+            cooldownTask?.cancel()
+            cooldownUntil = Date.now.addingTimeInterval(wait)
+            cooldownTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(min(wait, 2.4)))
+                guard !Task.isCancelled else { return }
+                cooldownUntil = nil
+            }
+            return
+        }
+        QuestionPrefs.lastShuffle = .now
+        cooldownTask?.cancel()
+        cooldownUntil = nil
         shuffles += 1
         shuffling = true
         Task { @MainActor in
@@ -224,7 +329,7 @@ struct TodayView: View {
         Task { @MainActor in
             let granted = await VoiceRecorder.requestPermissions()
             guard granted.mic else {
-                show("Microphone is off", VoiceRecorder.RecorderError.micDenied.localizedDescription)
+                settingsAlert = true
                 return
             }
             focused = false
@@ -278,12 +383,14 @@ struct TodayView: View {
             }
             let entry = try EntryWriter.seal(text, source: take != nil ? .voice : .text,
                                              audio: audio, audioDuration: take?.duration ?? 0,
+                                             prompt: question,
                                              context: context, streak: streak)
             player.stop()
             recorder.discard()
             take = nil
             focused = false
             text = ""
+            question = nil
             isEditing = false
             sealCount += 1
             sealedEntry = entry

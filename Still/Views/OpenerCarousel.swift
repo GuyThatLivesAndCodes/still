@@ -9,10 +9,13 @@ struct OpenerCarousel: View {
     var aiOpeners: Set<String> = []
     /// When false the carousel is hidden and its timer stops.
     let active: Bool
-    var onTap: () -> Void = {}
+    /// Tapping attaches the current question to the new entry.
+    var onTap: (String) -> Void = { _ in }
     /// True while a shuffle is in progress.
     var shuffling: Bool = false
     var onShuffle: () -> Void = {}
+    /// Set briefly after a shuffle is tried too soon: shows when the next one is allowed.
+    var cooldownUntil: Date? = nil
 
     static let interval: Duration = .seconds(15)
 
@@ -37,8 +40,20 @@ struct OpenerCarousel: View {
     var body: some View {
         ZStack {
             line
-                .opacity(shuffling ? 0 : 1)
-                .blur(radius: shuffling ? 8 : 0)
+                .opacity(shuffling || cooldownUntil != nil ? 0 : 1)
+                .blur(radius: shuffling || cooldownUntil != nil ? 8 : 0)
+            if let cooldownUntil, !shuffling {
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    let left = max(1, Int(cooldownUntil.timeIntervalSince(ctx.date).rounded(.up)))
+                    Label("Shuffle again in \(left)s", systemImage: "timer")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Theme.secondary)
+                        .monospacedDigit()
+                        .contentTransition(.numericText(countsDown: true))
+                        .animation(.snappy, value: left)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
             if shuffling {
                 Label("Shuffling", systemImage: "shuffle")
                     .font(.system(size: 15, weight: .medium))
@@ -48,10 +63,11 @@ struct OpenerCarousel: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: shuffling)
+        .animation(.easeInOut(duration: 0.25), value: cooldownUntil)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .gesture(swipe)
-        .onTapGesture { onTap() }
+        .onTapGesture { if !current.isEmpty && !shuffling { onTap(current) } }
         .onLongPressGesture(minimumDuration: 0.45) { if !shuffling { onShuffle() } }
         .task(id: TimerKey(index: index, active: active && !shuffling, count: openers.count)) {
             guard active, !shuffling, openers.count > 1 else { return }
@@ -68,7 +84,7 @@ struct OpenerCarousel: View {
         .onDisappear { swap?.cancel() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(current)
-        .accessibilityHint("Swipe up or down for another prompt. Double-tap to start writing.")
+        .accessibilityHint("Swipe up or down for another prompt. Double-tap to answer this question.")
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment: step(1)
@@ -76,7 +92,7 @@ struct OpenerCarousel: View {
             @unknown default: break
             }
         }
-        .accessibilityAction(.default) { onTap() }
+        .accessibilityAction(.default) { if !current.isEmpty { onTap(current) } }
         .accessibilityAction(named: "Shuffle prompts") { onShuffle() }
     }
 

@@ -9,11 +9,16 @@ struct NotesView: View {
     @Query(sort: \ChatMessage.createdAt) private var messages: [ChatMessage]
     @State private var opened: Note?
     @State private var deleteCandidate: Note?
+    /// Bumped by pull-to-refresh so the list and ETA re-read right away.
+    @State private var refreshedAt = Date.distantPast
+    @State private var refreshes = 0
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 10)) { ctx in
-            let visible = notes.filter { $0.isVisible(at: ctx.date) }
+        TimelineView(.periodic(from: .now, by: 5)) { ctx in
+            let now = max(ctx.date, refreshedAt)
+            let visible = notes.filter { $0.isVisible(at: now) }
             let waiting = notes.count > visible.count || !ReflectionQueue.pendingIDs.isEmpty
+            let eta = arrival(now: now)
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -29,14 +34,14 @@ struct NotesView: View {
                     if !ReflectionQueue.isEnabled {
                         offState
                     } else {
-                        if waiting { onItsWay }
+                        if waiting { onItsWay(eta: eta, now: now) }
                         if visible.isEmpty && !waiting {
                             emptyState
                         } else {
                             LazyVStack(spacing: 10) {
                                 ForEach(visible) { note in
                                     Button { open(note) } label: {
-                                        NoteCard(note: note, replies: replyCount(note, now: ctx.date),
+                                        NoteCard(note: note, replies: replyCount(note, now: now),
                                                  waitingReply: NoteChat.pendingReply(for: note.id) != nil)
                                     }
                                     .buttonStyle(NotePressStyle())
@@ -58,7 +63,9 @@ struct NotesView: View {
                 .padding(.bottom, 40)
             }
             .scrollIndicators(.hidden)
+            .refreshable { await refresh() }
         }
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: refreshes)
         .sheet(item: $opened) { NoteChatView(note: $0) }
         .alert("Delete this note?", isPresented: Binding(
             get: { deleteCandidate != nil }, set: { if !$0 { deleteCandidate = nil } }),
@@ -94,18 +101,56 @@ struct NotesView: View {
         if let note = notes.first(where: { $0.id == id }), note.isVisible() { opened = note }
     }
 
-    private var onItsWay: some View {
-        HStack(spacing: 14) {
+    /// When the next note lands: a written note's delivery time, else the batch timer.
+    private func arrival(now: Date) -> Date? {
+        let held = notes.filter { !$0.isVisible(at: now) }.compactMap(\.deliverAt).min()
+        if let held { return held }
+        return ReflectionQueue.pendingIDs.isEmpty ? nil : ReflectionQueue.fireAt
+    }
+
+    /// Pull to refresh: deliver anything due, retry chats, and re-read the clock.
+    private func refresh() async {
+        let started = Date.now
+        await ReflectionQueue.deliverIfDue(context: context)
+        await NoteChat.retryPending(context: context)
+        // Long enough for the spinner to read as a real check.
+        let wait = 0.6 - Date.now.timeIntervalSince(started)
+        if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+        refreshedAt = .now
+        refreshes += 1
+    }
+
+    /// "About 12 min", or "Coming in soon" once under ~3 minutes (or overdue).
+    static func etaText(_ eta: Date?, now: Date) -> (title: String, detail: String) {
+        guard let eta else {
+            return ("A note is on its way", "still. is reading what you sealed. You'll get a notification when it's here.")
+        }
+        let left = eta.timeIntervalSince(now)
+        if left <= 180 {
+            return ("Coming in soon", "Almost here. Pull down to check, or wait for the notification.")
+        }
+        let minutes = Int((left / 60).rounded(.up))
+        let time = eta.formatted(date: .omitted, time: .shortened)
+        let span = minutes >= 60 ? "about \(minutes / 60)h \(minutes % 60)m" : "about \(minutes) min"
+        return ("Next note in \(span)", "Expected around \(time). You'll get a notification when it's here.")
+    }
+
+    private func onItsWay(eta: Date?, now: Date) -> some View {
+        let copy = Self.etaText(eta, now: now)
+        return HStack(spacing: 14) {
             Image(systemName: "ellipsis.bubble")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(Theme.ai)
                 .symbolEffect(.pulse, options: .repeating)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
-                Text("A note is on its way")
+                Text(copy.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.ink)
-                Text("still. is reading what you sealed. You'll get a notification when it's here.")
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.snappy, value: copy.title)
+                Text(copy.detail)
                     .font(.footnote)
                     .foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -114,6 +159,7 @@ struct NotesView: View {
         }
         .padding(16)
         .glass(20)
+        .accessibilityElement(children: .combine)
     }
 
     private var offState: some View {

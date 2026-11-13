@@ -24,6 +24,8 @@ final class Entry {
     var revealedEarlyAt: Date?
     /// True once the early-reveal token for this entry was handed back (at its real open time).
     var tokenRefunded: Bool = false
+    /// The prompt the person tapped to answer, sealed like the entry. Nil = free writing.
+    var promptCipher: Data?
 
     static let sealDays = 5
     static let deletionWait: TimeInterval = 2 * 3600
@@ -60,6 +62,17 @@ final class Entry {
 
     func plainText() -> String {
         (try? EntryCipher.open(cipher)) ?? ""
+    }
+
+    /// The question this entry answers, if one was attached.
+    func promptText() -> String? {
+        promptCipher.flatMap { try? EntryCipher.open($0) }.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Entry text with its question in front, for the AI and exports.
+    func contextText() -> String {
+        guard let q = promptText() else { return plainText() }
+        return "Question: \(q)\nAnswer: \(plainText())"
     }
 
     var hasAudio: Bool { audioCipher != nil }

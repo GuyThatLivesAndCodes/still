@@ -15,6 +15,9 @@ struct YouView: View {
     @State private var remindersDenied = false
     @State private var showAI = false
     @State private var showProfile = false
+    @State private var showQuestions = false
+    @AppStorage(QuestionPrefs.categoriesKey) private var questionCategories = ""
+    @AppStorage(QuestionPrefs.mixKey) private var questionMix = AIMix.mild.rawValue
     @AppStorage(Profile.nameKey) private var profileName = ""
     @AppStorage(Profile.birthdayKey) private var profileBirthday: Double = 0
     @AppStorage(Profile.genderKey) private var profileGender = Gender.unset.rawValue
@@ -66,6 +69,11 @@ struct YouView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Daily reminder").font(.body.weight(.medium))
                                 Text(habitLine).font(.footnote).foregroundStyle(Theme.tertiary)
+                                if remindersEnabled {
+                                    Text("Plus a nudge later if you haven't written, and one an hour before your streak ends.")
+                                        .font(.caption).foregroundStyle(Theme.tertiary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
                         .tint(Theme.accent)
@@ -110,6 +118,23 @@ struct YouView: View {
                         }
                     }
                     .animation(.snappy, value: remindersEnabled)
+                }
+
+                section("Questions") {
+                    Button { showQuestions = true } label: {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Prompts above Write").font(.body.weight(.medium)).foregroundStyle(Theme.ink)
+                                Text(questionsLine).font(.footnote).foregroundStyle(Theme.tertiary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(Theme.tertiary)
+                        }
+                        .padding(16)
+                        .frame(minHeight: 52)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 section("Quiet AI") {
@@ -172,6 +197,7 @@ struct YouView: View {
         .sheet(isPresented: $showPrivacy) { PrivacySheet() }
         .sheet(isPresented: $showAI) { AISettingsView() }
         .sheet(isPresented: $showProfile) { ProfileView() }
+        .sheet(isPresented: $showQuestions) { QuestionsSettingsView() }
         .onChange(of: aiNudges) { _, _ in
             ReminderService.reschedule(entryDates: entries.map(\.createdAt), streak: streak, enabled: remindersEnabled)
         }
@@ -203,6 +229,13 @@ struct YouView: View {
         }
         .padding(18)
         .glass(22)
+    }
+
+    private var questionsLine: String {
+        let cats = QuestionPrefs.decode(questionCategories)
+        let kinds = cats.count == OpenerCategory.allCases.count ? "All kinds"
+            : OpenerCategory.allCases.filter(cats.contains).map(\.title).joined(separator: ", ")
+        return "\(kinds) · \((AIMix(rawValue: questionMix) ?? .mild).title)"
     }
 
     private var initial: String {
@@ -255,7 +288,7 @@ struct YouView: View {
 
     private var exportText: String {
         readyEntries.reversed().map { e in
-            "\(e.createdAt.formatted(date: .complete, time: .shortened))\n\n\(e.plainText())"
+            "\(e.createdAt.formatted(date: .complete, time: .shortened))\n\n\(e.promptText().map { "“\($0)”\n\n" } ?? "")\(e.plainText())"
         }.joined(separator: "\n\n———\n\n")
     }
 

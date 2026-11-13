@@ -11,6 +11,7 @@ struct AIOpeners: OpenerProvider {
     private static let cacheKey = "ai.openers.cipher"
     private static let dateKey = "ai.openers.date"
     private static let countKey = "ai.openers.entryCount"
+    private static let styleKey = "ai.openers.style"
     private static let minEntries = 3
     private static let maxAge: TimeInterval = 12 * 3600
 
@@ -53,16 +54,19 @@ struct AIOpeners: OpenerProvider {
 
         let defaults = UserDefaults.standard
         let age = (defaults.object(forKey: dateKey) as? Date).map { Date.now.timeIntervalSince($0) } ?? .infinity
-        guard force || age > maxAge || defaults.integer(forKey: countKey) != total else { return nil }
+        let style = QuestionPrefs.signature
+        guard force || age > maxAge || defaults.integer(forKey: countKey) != total
+                || (defaults.string(forKey: styleKey) ?? "") != style else { return nil }
 
         var notes = FetchDescriptor<Note>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         notes.fetchLimit = 3
         var chats = FetchDescriptor<ChatMessage>(predicate: #Predicate<ChatMessage> { !$0.fromAI },
                                                  sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         chats.fetchLimit = 3
-        let texts = entries.reversed().map { $0.plainText() }
+        let texts = entries.reversed().map { $0.contextText() }
             + ((try? context.fetch(notes)) ?? []).reversed().map { $0.plainText() }
             + ((try? context.fetch(chats)) ?? []).reversed().map { $0.plainText() }
+            + (QuestionPrefs.aiHint.map { [$0] } ?? [])
 
         refreshing = true
         defer { refreshing = false }
@@ -72,6 +76,7 @@ struct AIOpeners: OpenerProvider {
         defaults.set(sealed, forKey: cacheKey)
         defaults.set(Date.now, forKey: dateKey)
         defaults.set(total, forKey: countKey)
+        defaults.set(style, forKey: styleKey)
         return openers
     }
 }

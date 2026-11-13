@@ -65,7 +65,7 @@ struct AISettingsView: View {
                             feature("bubble.left.and.bubble.right", "Talk it through",
                                     "Tap a note to reply. still. answers 3 to 5 minutes after your last message, so it feels like a letter, not a chat app.")
                             feature("text.quote", "Openers just for you",
-                                    "After a few entries, some prompts above the box come from your own writing. Hold one to shuffle and get new ones.")
+                                    "After a few entries, some prompts above the box come from your own writing. Hold one to shuffle (once every 30 seconds), and pick the mix in You → Questions.")
                             feature("bell", "Reminders in its own words",
                                     "Your daily reminder can be written fresh each day. It never mentions anything sensitive. Turn it off in You → Notifications.")
                             feature("person", "Fits you",

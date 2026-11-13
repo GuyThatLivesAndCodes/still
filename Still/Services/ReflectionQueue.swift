@@ -78,7 +78,7 @@ enum ReflectionQueue {
         let all = (try? context.fetch(FetchDescriptor<Entry>())) ?? []
         let texts = all.filter { ids.contains($0.id.uuidString) }
             .sorted { $0.createdAt < $1.createdAt }
-            .map { $0.plainText() }
+            .map { $0.contextText() }
         guard !texts.isEmpty else { clear(); return }
 
         job += 1

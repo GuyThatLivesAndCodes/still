@@ -10,11 +10,15 @@ enum EntryWriter {
     @discardableResult
     static func seal(_ text: String, source: EntrySource, createdAt: Date = .now,
                      audio: Data? = nil, audioDuration: TimeInterval = 0,
+                     prompt: String? = nil,
                      context: ModelContext, streak: StreakStore) throws -> Entry {
         let entry = Entry(cipher: try EntryCipher.seal(text), source: source, createdAt: createdAt)
         if let audio {
             entry.audioCipher = try EntryCipher.seal(data: audio)
             entry.audioDuration = audioDuration
+        }
+        if let prompt, !prompt.isEmpty {
+            entry.promptCipher = try EntryCipher.seal(prompt)
         }
         context.insert(entry)
         try context.save()
