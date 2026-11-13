@@ -39,9 +39,12 @@ enum NudgeWriter {
         var chats = FetchDescriptor<ChatMessage>(predicate: #Predicate<ChatMessage> { !$0.fromAI },
                                                  sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         chats.fetchLimit = 5
-        let texts = ((try? context.fetch(entries)) ?? []).reversed().map { $0.contextText() }
-            + ((try? context.fetch(notes)) ?? []).reversed().map { $0.plainText() }
-            + ((try? context.fetch(chats)) ?? []).reversed().map { $0.plainText() }
+        let entryRows: [Entry] = (try? context.fetch(entries)) ?? []
+        let noteRows: [Note] = (try? context.fetch(notes)) ?? []
+        let chatRows: [ChatMessage] = (try? context.fetch(chats)) ?? []
+        var texts: [String] = entryRows.reversed().map { $0.contextText() }
+        texts += noteRows.reversed().map { $0.plainText() }
+        texts += chatRows.reversed().map { $0.plainText() }
         let input = texts.isEmpty ? ["(No writing yet.)"] : texts
 
         refreshing = true
