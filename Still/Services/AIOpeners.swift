@@ -63,10 +63,13 @@ struct AIOpeners: OpenerProvider {
         var chats = FetchDescriptor<ChatMessage>(predicate: #Predicate<ChatMessage> { !$0.fromAI },
                                                  sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
         chats.fetchLimit = 3
-        let texts = entries.reversed().map { $0.contextText() }
-            + ((try? context.fetch(notes)) ?? []).reversed().map { $0.plainText() }
-            + ((try? context.fetch(chats)) ?? []).reversed().map { $0.plainText() }
-            + (QuestionPrefs.aiHint.map { [$0] } ?? [])
+        // Built in typed steps: one long `+` chain is too slow for the type checker.
+        let noteRows: [Note] = (try? context.fetch(notes)) ?? []
+        let chatRows: [ChatMessage] = (try? context.fetch(chats)) ?? []
+        var texts: [String] = entries.reversed().map { $0.contextText() }
+        texts += noteRows.reversed().map { $0.plainText() }
+        texts += chatRows.reversed().map { $0.plainText() }
+        if let hint = QuestionPrefs.aiHint { texts.append(hint) }
 
         refreshing = true
         defer { refreshing = false }
