@@ -320,39 +320,33 @@ private struct RevealDemoPage: View {
     var body: some View {
         PageLayout(eyebrow: "Step three",
                    title: "Let it go.",
-                   detail: "When an entry opens, you can read it for 60 seconds before it reseals. If you really need one sooner, you get 2 early reveals a week.") {
+                   detail: "When an entry opens, tap to read it, then let it rest again. If you really need one sooner, you get 2 early reveals a week.") {
             VStack(spacing: 18) {
                 Spacer()
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("Sat, Oct 24 · Night").font(.system(size: 15, weight: .semibold))
                         Spacer()
-                        if revealed {
-                            Text("\(left)")
-                                .font(.system(size: 15, weight: .semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(Theme.accent)
-                                .contentTransition(.numericText(countsDown: true))
-                        } else {
-                            Image(systemName: "lock").font(.footnote)
-                        }
+                        Image(systemName: revealed ? "timer" : "lock")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(revealed ? Theme.accent : Theme.ink)
+                            .contentTransition(.symbolEffect(.replace))
                     }
                     .foregroundStyle(Theme.ink)
                     Text("I finally said no to the extra project. Felt guilty for an hour, then lighter than I have in weeks.")
                         .font(.system(size: 15))
                         .foregroundStyle(Theme.secondary)
-                        .blur(radius: revealed ? 0 : 7)
+                        .invisibleInk(!revealed, tint: Theme.ink)
                 }
                 .padding(18)
                 .glass(22)
                 .frame(maxWidth: 320)
+                .contentShape(Rectangle())
+                .onTapGesture { revealed ? reseal() : reveal() }
 
                 Button(revealed ? "Reseal now" : "Reveal") { revealed ? reseal() : reveal() }
                     .buttonStyle(SecondaryButtonStyle())
                     .frame(width: 180)
-                Text("This demo reseals after 5 seconds.")
-                    .font(.caption)
-                    .foregroundStyle(Theme.tertiary)
                 Spacer()
             }
         }

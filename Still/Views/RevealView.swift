@@ -1,10 +1,13 @@
 import SwiftUI
 import SwiftData
 
-/// Shows an entry for 60 seconds (longer for voice entries, so the whole
-/// recording can be heard), then reseals automatically.
+/// Shows an entry. Entries under two months old get a short timed view
+/// (longer for voice entries, so the whole recording can be heard), then
+/// reseal on their own; older ones stay open until closed.
 struct RevealView: View {
     let entry: Entry
+    @State private var timed = true
+    @State private var inked = true
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var endsAt = Date.now.addingTimeInterval(60)
@@ -15,7 +18,7 @@ struct RevealView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
-            let left = max(0, endsAt.timeIntervalSince(ctx.date))
+            let left = timed ? max(0, endsAt.timeIntervalSince(ctx.date)) : window
             ZStack {
                 Color.black.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 24) {
@@ -28,9 +31,9 @@ struct RevealView: View {
                                 .glass(22)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Reseal and go back")
+                        .accessibilityLabel(timed ? "Reseal and go back" : "Close")
                         Spacer()
-                        ring(left: left)
+                        if timed { ring(left: left) }
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -58,25 +61,32 @@ struct RevealView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.disabled)
                                 .privacySensitive()
+                                .invisibleInk(inked, tint: Theme.ink)
                         }
                     }
                     .scrollIndicators(.hidden)
 
-                    Text("This view reseals on its own. Nothing here can be changed.")
+                    Text("Nothing here can be changed.")
                         .font(.footnote)
                         .foregroundStyle(Theme.tertiary)
                         .frame(maxWidth: .infinity)
 
-                    Button("Reseal now") { dismiss() }
+                    Button(timed ? "Reseal now" : "Close") { dismiss() }
                         .buttonStyle(PrimaryButtonStyle())
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
             }
-            .onChange(of: left <= 0) { _, done in if done { dismiss() } }
+            .onChange(of: left <= 0) { _, done in if done && timed { dismiss() } }
         }
         .onAppear {
+            timed = entry.isTimed()
             text = entry.plainText()
+            // The ink lifts a beat after the screen lands.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(250))
+                inked = false
+            }
             question = entry.promptText()
             if entry.hasAudio {
                 window = max(60, entry.audioDuration + 20)
@@ -86,7 +96,8 @@ struct RevealView: View {
         }
         .onDisappear { player.stop() }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { dismiss() }
+            if timed { if phase != .active { dismiss() } }
+            else { inked = phase != .active }
         }
     }
 

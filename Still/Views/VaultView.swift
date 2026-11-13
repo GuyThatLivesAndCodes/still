@@ -238,7 +238,7 @@ struct VaultView: View {
             Button("Cancel deletion", systemImage: "arrow.uturn.backward") { entry.deletionRequestedAt = nil }
         } else {
             if entry.isReady(at: now) {
-                Button("Reveal for 60 seconds", systemImage: "eye") { revealing = entry }
+                Button("Open", systemImage: "eye") { revealing = entry }
             } else if wallet.available(at: now) > 0 {
                 Button("Reveal early · 1 token", systemImage: "eye") { earlyCandidate = entry }
             }
@@ -550,13 +550,12 @@ private struct EntryCard: View {
                 Spacer(minLength: 8)
                 status
             }
-            // Never decrypt for the list: the preview is blurred anyway, so a
+            // Never decrypt for the list: the preview is under ink anyway, so a
             // placeholder of similar length looks the same and keeps scrolling smooth.
             Text(placeholder)
                 .font(.system(size: 15))
                 .lineLimit(2)
-                .foregroundStyle(ready ? Theme.ink.opacity(0.75) : Theme.secondary)
-                .blur(radius: 7)
+                .invisibleInk(true, tint: ready ? Theme.ink : Theme.secondary)
                 .privacySensitive()
                 .accessibilityHidden(true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -596,15 +595,21 @@ private struct EntryCard: View {
 
     @ViewBuilder private var footer: some View {
         if ready {
-            HStack {
-                Label("Reveal for 60 seconds", systemImage: "clock")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-                if entry.wasOpenedEarly {
-                    Text("Opened early")
-                        .font(.caption)
-                        .foregroundStyle(Theme.tertiary)
+            let timed = entry.isTimed(at: now)
+            if timed || entry.wasOpenedEarly {
+                HStack {
+                    if timed {
+                        Image(systemName: "timer")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Theme.secondary)
+                            .accessibilityLabel("Timed view")
+                    }
+                    Spacer()
+                    if entry.wasOpenedEarly {
+                        Text("Opened early")
+                            .font(.caption)
+                            .foregroundStyle(Theme.tertiary)
+                    }
                 }
             }
         } else if entry.source == .voice {

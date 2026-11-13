@@ -183,7 +183,7 @@ struct NotesView: View {
     }
 }
 
-/// A note in the list: blurred until opened, like entries in the vault.
+/// A note in the list: covered in ink until opened, like entries in the vault.
 private struct NoteCard: View {
     let note: Note
     let replies: Int
@@ -228,7 +228,7 @@ private struct NoteCard: View {
                 .font(.system(size: 16))
                 .lineLimit(3)
                 .foregroundStyle(Theme.ai.opacity(0.8))
-                .blur(radius: 7)
+                .invisibleInk(true, tint: Theme.ai)
                 .privacySensitive()
                 .accessibilityHidden(true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -270,6 +270,8 @@ struct NoteChatView: View {
     @State private var draft = ""
     @State private var noteText = ""
     @State private var sent = 0
+    @State private var noteHidden = true
+    @State private var noteOrigin: CGPoint?
     @FocusState private var typing: Bool
 
     init(note: Note) {
@@ -376,6 +378,9 @@ struct NoteChatView: View {
                 .foregroundStyle(Theme.ai)
                 .privacySensitive()
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .invisibleInk(noteHidden, tint: Theme.ai, origin: noteOrigin)
+                .inkReveal(hidden: $noteHidden, origin: $noteOrigin)
+                .accessibilityLabel(noteHidden ? "Hidden note" : noteText)
             Divider().overlay(Theme.hairline)
             Text(note.entryCount > 1
                  ? "\(Fmt.exact(note.arrivedAt)) · for \(note.entryCount) entries"
@@ -436,10 +441,13 @@ struct NoteChatView: View {
     }
 }
 
+/// One chat message, covered in ink: tap to show, tap again (or wait a minute) to hide.
 private struct Bubble: View {
     let text: String
     let fromAI: Bool
     let time: Date
+    @State private var hidden = true
+    @State private var origin: CGPoint?
 
     var body: some View {
         HStack {
@@ -449,6 +457,7 @@ private struct Bubble: View {
                     .font(.system(size: 17))
                     .lineSpacing(2)
                     .foregroundStyle(fromAI ? Theme.ai : Color.black)
+                    .invisibleInk(hidden, tint: fromAI ? Theme.ai : Color.black, origin: origin)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(fromAI ? Theme.card : Theme.ink,
@@ -460,7 +469,7 @@ private struct Bubble: View {
                         }
                     }
                     .privacySensitive()
-                    .textSelection(.enabled)
+                    .inkReveal(hidden: $hidden, origin: $origin, inset: CGSize(width: 14, height: 10))
                 Text(time.formatted(date: .omitted, time: .shortened))
                     .font(.caption2)
                     .foregroundStyle(Theme.tertiary)
@@ -469,7 +478,7 @@ private struct Bubble: View {
             if fromAI { Spacer(minLength: 48) }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel((fromAI ? "still.: " : "You: ") + text)
+        .accessibilityLabel((fromAI ? "still.: " : "You: ") + (hidden ? "hidden message" : text))
     }
 }
 

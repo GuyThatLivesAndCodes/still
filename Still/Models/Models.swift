@@ -20,7 +20,7 @@ final class Entry {
     @Attribute(.externalStorage) var audioCipher: Data?
     var audioDuration: Double = 0
     /// Set when a token opens the entry early. From then on it behaves as if
-    /// its open date has passed: it still reseals after each 60-second view.
+    /// its open date has passed (still timed while it's under two months old).
     var revealedEarlyAt: Date?
     /// True once the early-reveal token for this entry was handed back (at its real open time).
     var tokenRefunded: Bool = false
@@ -53,6 +53,12 @@ final class Entry {
     func isReady(at now: Date = .now) -> Bool { revealedEarlyAt != nil || now >= opensAt }
 
     var wasOpenedEarly: Bool { revealedEarlyAt != nil && Date.now < opensAt }
+
+    /// Entries under two months old open for a short timed view; older ones can be read freely.
+    func isTimed(at now: Date = .now) -> Bool {
+        let cutoff = Calendar.current.date(byAdding: .month, value: -2, to: now) ?? now.addingTimeInterval(-61 * 86400)
+        return createdAt > cutoff
+    }
 
     var deletionConfirmableAt: Date? {
         deletionRequestedAt?.addingTimeInterval(Entry.deletionWait)
